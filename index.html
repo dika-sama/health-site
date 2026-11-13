@@ -94,15 +94,6 @@
   td.num { font-variant-numeric: tabular-nums; }
   .scroll { overflow-x: auto; }
 
-  .food-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
-  .food { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: #fff; }
-  .food .ph { height: 150px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; font-size: 40px; color: var(--muted); }
-  .food .ph img { width: 100%; height: 100%; object-fit: cover; }
-  .food .info { padding: 12px 14px; }
-  .food .name { font-weight: 600; font-size: 15px; }
-  .food .macros { display: flex; gap: 10px; margin: 8px 0; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
-  .food .macros b { color: var(--text); font-weight: 600; }
-  .food .why { font-size: 13px; color: var(--muted); }
 
   .note { padding: 12px 0; border-bottom: 1px solid var(--border); }
   .note:last-child { border-bottom: none; }
@@ -150,7 +141,6 @@
   <div class="page-tabs">
     <button class="page-tab active" data-page="home">汇总</button>
     <button class="page-tab" data-page="body">身体数据</button>
-    <button class="page-tab" data-page="foods">食物图鉴</button>
     <button class="page-tab" data-page="notes">知识库</button>
     <button class="page-tab" data-page="review">Review</button>
     <button class="page-tab" data-page="training">训练与饮食</button>
@@ -187,11 +177,6 @@
     </div>
   </div>
 
-  <!-- ============ 食物图鉴页 ============ -->
-  <div class="page" id="page-foods">
-    <div class="food-grid" id="foods"></div>
-    <div class="empty" id="foodsEmpty" style="display:none">还没有记录，遇到好吃的告诉 AI 吧</div>
-  </div>
 
   <!-- ============ 知识库页:左侧知识列表 + 右侧正文 ============ -->
   <div class="page" id="page-notes">
@@ -310,7 +295,7 @@ const METRICS = {
   sleepHours:     { label: '睡眠 (小时)',      color: '#9b59b6', chart: 'chart-sleepHours',     bar: true },
 };
 function applyConfig() {
-  for (const [key, std] of Object.entries(CFG.standards ?? {})) {
+  for (const [key, std] of Object.entries(CFG.standards || {})) {
     const m = METRICS[key];
     if (!m) continue;
     m.standard = std.value;              // 统一字段:标准线值
@@ -326,7 +311,7 @@ async function loadJSON(p) {
   return r.json();
 }
 
-function fmt(n) { return (n ?? '') === '' ? '' : Number(n).toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1'); }
+function fmt(n) { return (n == null || n === '') ? '' : Number(n).toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1'); }
 
 /* ---------- 汇总页:指标卡 ---------- */
 // 占比指标现场计算:体脂率 = fatMass/weight, 肌肉率 = muscleMass/weight
@@ -363,7 +348,7 @@ function goalDataset(g) {
   const start = new Date(g.start + 'T00:00:00'), end = new Date(g.end + 'T00:00:00');
   const span = end - start;
   const N = span / 86400e3;
-  const k = g.decay ?? 0.0075;
+  const k = g.decay != null ? g.decay : 0.0075;
   const isExp = g.curve === 'exp';
   const valAt = (t) => {
     const n = (t - start.getTime()) / 86400e3;
@@ -458,7 +443,8 @@ function renderMetricChart(metric, rowsRaw, goals) {
 
   // 标注定义:首点(起始值) + 末点(当前值[+达成率]),像素位置由插件绘制时实时取
   const labels = [];
-  const unit = m.label.match(/\((.+)\)/)?.[1] ?? '';
+  const unitM = m.label.match(/\((.+)\)/);
+  const unit = unitM ? unitM[1] : '';
   labels.push({ idx: 0, text: `${fmt(rows[0][metric])}${unit}`, color: m.color });
   if (rows.length > 1) {
     const text = rate !== null
@@ -472,7 +458,7 @@ function renderMetricChart(metric, rowsRaw, goals) {
 /* ---------- 活动维度柱状图(水平目标虚线,纵轴固定范围,横轴与趋势图一致) ---------- */
 function renderBarChart(m, series) {
   // 与饮食图同构:标准线横贯全图,超出目标的部分堆叠展示(活动消耗=绿色,达标是好事)
-  renderPlainBarChart({ ...m, standard: m.dailyGoal, overColor: m.overColor ?? GREEN }, series);
+  renderPlainBarChart({ ...m, standard: m.dailyGoal, overColor: m.overColor != null ? m.overColor : GREEN }, series);
 }
 
 /* ---------- 饮食柱状图(黄色柱,标准虚线横贯全图,超标准标红/绿色) ---------- */
@@ -483,7 +469,7 @@ function renderPlainBarChart(m, series) {
   const datasets = [];
   if (m.standard != null) {
     // 堆叠两段:黄色段 = min(值, 标准);超出段 = |值-标准|,颜色由 overColor 决定(默认红,可绿)
-    const overColor = (m.overColor ?? RED) + 'cc';
+    const overColor = (m.overColor != null ? m.overColor : RED) + 'cc';
     const base = series.map(p => ({ x: p.x, y: p.y == null ? null : Math.min(p.y, m.standard) }));
     const over = series.map(p => ({ x: p.x, y: p.y == null || p.y <= m.standard ? null : p.y - m.standard }));
     datasets.push(
@@ -513,7 +499,7 @@ function renderPlainBarChart(m, series) {
       tooltip: {
         filter: (item) => item.datasetIndex !== 2,             // 不提示标准线
         callbacks: {
-          title: (items) => items[0]?.parsed?.x != null
+          title: (items) => (items[0] && items[0].parsed && items[0].parsed.x != null)
             ? new Date(items[0].parsed.x).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
             : '',
           label: (item) => {
@@ -548,9 +534,9 @@ function renderTable(rowsRaw, daily) {
   const rows = rowsRaw.map(derived);
   const allDates = [...new Set([...rows.map(r => r.date), ...Object.keys(daily)])].sort().reverse();
   const rowOf = (d) => rows.find(r => r.date === d);
-  const day = (d) => daily[d] ?? {};
+  const day = (d) => daily[d] || {};
   tb.innerHTML = allDates.map(d => {
-    const r = rowOf(d) ?? {};
+    const r = rowOf(d) || {};
     const s = day(d);
     return `<tr>
       <td>${d}</td>
@@ -561,23 +547,6 @@ function renderTable(rowsRaw, daily) {
       <td>${r.note || ''}</td>
     </tr>`;
   }).join('');
-}
-
-/* ---------- 食物 ---------- */
-function renderFoods(foods) {
-  const el = document.getElementById('foods');
-  document.getElementById('foodsEmpty').style.display = foods.length ? 'none' : 'block';
-  el.innerHTML = foods.map(f => `<div class="food">
-    <div class="ph">${f.photo ? `<img src="${f.photo}" alt="${f.name}">` : '🍽️'}</div>
-    <div class="info">
-      <div class="name">${f.name}</div>
-      <div class="macros">
-        <span>热量 <b>${fmt(f.kcal)} kCal</b></span><span>蛋白 <b>${fmt(f.protein)} g</b></span>
-        <span>脂肪 <b>${fmt(f.fat)} g</b></span><span>钠 <b>${fmt(f.sodium)} mg</b></span>
-      </div>
-      <div class="why">${[f.basis, f.reason, f.how].filter(Boolean).join(' · ')}</div>
-    </div>
-  </div>`).join('');
 }
 
 /* ---------- 知识库:左列表 + 右正文 ---------- */
@@ -592,11 +561,11 @@ function renderNotes(items) {
   const show = (n) => {
     listEl.querySelectorAll('.review-item').forEach(x => x.classList.toggle('active', x.dataset.id === n.id));
     document.getElementById('noteDetailTitle').textContent = `📖 ${n.title}`;
-    document.getElementById('noteDetailMeta').textContent = `${n.date}${n.tags?.length ? ' · ' + n.tags.join(' / ') : ''}`;
+    document.getElementById('noteDetailMeta').textContent = `${n.date}${(n.tags && n.tags.length) ? ' · ' + n.tags.join(' / ') : ''}`;
     // 渲染:文本段 + 表格段 + 列表段 + 内嵌图表段(图表定义在 n.charts)
     document.getElementById('noteDetailBody').innerHTML = n.body.map(sec => {
       if (sec.chart) return `<div class="kb-chart"><canvas id="${sec.chart}"></canvas></div>`;
-      const listHtml = sec.list?.length
+      const listHtml = (sec.list && sec.list.length)
         ? `<ul class="kb-list">${sec.list.map(li => `<li>${li}</li>`).join('')}</ul>` : '';
       const tableHtml = sec.table
         ? `<div class="scroll"><table class="kb-table">
@@ -606,15 +575,15 @@ function renderNotes(items) {
       return `<div class="kb-sec"><h3>${sec.h}</h3>${sec.p ? `<p>${sec.p}</p>` : ''}${listHtml}${tableHtml}${sec.p2 ? `<p style="margin-top:8px">${sec.p2}</p>` : ''}</div>`;
     }).join('');
     // 建图
-    (n.charts ?? []).forEach(spec => {
+    (n.charts || []).forEach(spec => {
       const canvas = document.getElementById(spec.id);
       if (!canvas) return;
       if (charts['kb-' + spec.id]) charts['kb-' + spec.id].destroy();
       const ds = spec.datasets.map(d => ({
         ...d,
-        type: d.type ?? (spec.type ?? 'bar'),
-        backgroundColor: (d.backgroundColor ?? d.color ?? '#4f7cff') + 'cc',
-        borderColor: d.borderColor ?? d.color ?? '#4f7cff',
+        type: d.type != null ? d.type : (spec.type != null ? spec.type : 'bar'),
+        backgroundColor: (d.backgroundColor != null ? d.backgroundColor : (d.color != null ? d.color : '#4f7cff')) + 'cc',
+        borderColor: d.borderColor != null ? d.borderColor : (d.color != null ? d.color : '#4f7cff'),
         borderRadius: 3, barPercentage: 0.8, categoryPercentage: 0.9,
       }));
       charts['kb-' + spec.id] = new Chart(canvas, {
@@ -624,7 +593,7 @@ function renderNotes(items) {
           interaction: { mode: 'nearest', intersect: false },
           parsing: { xAxisKey: 'x', yAxisKey: 'y' },
           indexAxis: spec.horizontal ? 'y' : 'x',
-          scales: spec.scales ?? { y: { beginAtZero: true } },
+          scales: spec.scales || { y: { beginAtZero: true } },
           plugins: {
             legend: spec.legend === false ? { display: false } : { display: true, position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
             tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${item.parsed[spec.horizontal ? 'x' : 'y']}%` } },
@@ -636,7 +605,7 @@ function renderNotes(items) {
   listEl.innerHTML = sorted.map(n => `
     <div class="review-item" data-id="${n.id}">
       <div class="t">${n.title}</div>
-      <div class="d">${n.date}${n.tags?.length ? ' · ' + n.tags[0] : ''}</div>
+      <div class="d">${n.date}${(n.tags && n.tags.length) ? ' · ' + n.tags[0] : ''}</div>
     </div>`).join('');
   listEl.querySelectorAll('.review-item').forEach(item => item.onclick = () => {
     show(sorted.find(n => n.id === item.dataset.id));
@@ -646,7 +615,7 @@ function renderNotes(items) {
 
 /* ---------- 训练页:左侧训练日 + 右侧动作明细 + 周组数核对 ---------- */
 function renderTraining(training) {
-  if (!training?.sessions?.length) return;
+  if (!training && training.sessions && training.sessions.length) return;
   const listEl = document.getElementById('trainingList');
   const t = training.target;
   document.getElementById('trainingTargetHint').textContent =
@@ -692,13 +661,13 @@ function renderTraining(training) {
     <li><b>进退标准:</b>动作能标准做满上限 → 升级难度;做不到下限 → 降级难度,动作质量优先于次数</li>
   </ul>`;
   // 三餐表 + 饮食规则
-  if (training.meals?.length) {
+  if (training.meals && training.meals.length) {
     document.querySelector('#mealTable tbody').innerHTML = training.meals.map(m => `<tr>
       <td><b>${m.slot}</b></td><td class="num">${m.protein}</td><td class="num">${m.kcal}</td>
       <td style="font-size:13px">${m.staples}</td><td style="font-size:12px;color:var(--muted)">${m.swaps || ''}</td>
     </tr>`).join('');
   }
-  if (training.mealRules?.length) {
+  if (training.mealRules && training.mealRules.length) {
     document.getElementById('mealRules').innerHTML = `<div class="hint" style="margin-bottom:4px">🍽️ 饮食四条</div><ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9">
       ${training.mealRules.map(r => `<li>${r}</li>`).join('')}
     </ul>`;
@@ -742,14 +711,14 @@ function buildChartRows(goals) {
   el.innerHTML = order.map(key => {
     const m = METRICS[key];
     return `<div class="chart-row">
-      <div class="row-head"><h2>${emoji[key]} ${m.label.replace(/ \(.+\)/, '')} <small>${(m.label.match(/\((.+)\)/) ?? ['', ''])[1]}</small></h2>
+      <div class="row-head"><h2>${emoji[key]} ${m.label.replace(/ \(.+\)/, '')} <small>${((m.label.match(/\((.+)\)/) || ['', ''])[1])}</small></h2>
         <div class="hint" id="hint-${key}">${metricHint(key, goals)}</div></div>
       <div class="chart-box"><canvas id="${m.chart}"></canvas></div>
     </div>`;
   }).join('');
   // 目标卡标题:取全部目标的最新 end
   const ends = (goals || []).map(g => g.end).sort();
-  document.getElementById('goalTitle').textContent = `🎯 目标（至 ${ends[ends.length - 1] ?? CFG.xAxisEnd}）`;
+  document.getElementById('goalTitle').textContent = `🎯 目标（至 ${ends.length ? ends[ends.length - 1] : CFG.xAxisEnd}）`;
 }
 
 /* ---------- 设置页:参数一览 ---------- */
@@ -762,7 +731,7 @@ function renderSettings(goals) {
     <td>${g.note || ''}</td>
   </tr>`).join('');
   const stdRows = Object.entries(CFG.standards).map(([key, s]) => `<tr>
-    <td>${METRICS[key]?.label ?? key}</td>
+    <td>${METRICS[key] && METRICS[key].label ? METRICS[key].label : key}</td>
     <td class="num">${fmt(s.value)}</td>
     <td class="num">${s.yMin} ~ ${s.yMax}</td>
     <td>${s.overColor === 'green' ? '超出=绿' : '超出=红'}</td>
@@ -868,7 +837,7 @@ function renderReview(rows, daily, goals) {
   const d = (offset) => { const t = new Date(today); t.setDate(t.getDate() - offset); return t.toISOString().slice(0, 10); };
   const cur = seg(d(13), d(0)), prev = seg(d(27), d(14));
   // 行为达标率(近14天)
-  const stds = CFG.standards ?? {};
+  const stds = CFG.standards || {};
   const behavior = Object.entries(stds).map(([key, s]) => {
     const vals = Object.entries(daily).filter(([dt]) => dt >= d(13)).map(([, v]) => v[key]).filter(v => v != null);
     if (!vals.length) return { key, n: 0, hit: 0, avg: null, rate: null, dir: s.overColor };
@@ -917,7 +886,7 @@ function renderReview(rows, daily, goals) {
       document.getElementById('reviewDetailTitle').textContent = `📝 ${r.title}`;
       document.getElementById('reviewDetailMeta').textContent = `${r.date} · ${r.period}`;
       const VC = { good: [GREEN, '✓'], warning: ['#e08c2f', '⚠'], bad: [RED, '✗'] };
-      const [vc, vi] = VC[r.verdict] ?? VC.warning;
+      const [vc, vi] = VC[r.verdict] || VC.warning;
       document.getElementById('reviewDetailBody').innerHTML = `
         ${r.summary ? `<div style="border-left:3px solid ${vc};background:${vc}14;padding:10px 14px;margin-bottom:14px;border-radius:0 6px 6px 0">
           <div style="font-size:14px;font-weight:700;color:${vc};margin-bottom:4px">${vi} 本期判定</div>
@@ -925,7 +894,7 @@ function renderReview(rows, daily, goals) {
         </div>` : ''}
         <div class="note" style="border:none;padding-top:4px">
           <div class="c">${r.conclusion}</div>
-          <div class="d" style="margin-top:8px">📌 下期重点:${r.focus ?? '—'}</div>
+          <div class="d" style="margin-top:8px">📌 下期重点:${r.focus != null ? r.focus : '—'}</div>
         </div>`;
     };
     listEl.innerHTML = sorted.map(r => `
@@ -945,9 +914,9 @@ function renderReview(rows, daily, goals) {
 (async () => {
   try {
     const rows = await loadJSON('data/body.json');
-    const [goals, foods, knowledge, training] = await Promise.all([
+    const [goals, knowledge, training] = await Promise.all([
       loadJSON('data/goals.json').catch(() => []),
-      loadJSON('data/foods.json'), loadJSON('data/knowledge.json').catch(() => []),
+      loadJSON('data/knowledge.json').catch(() => []),
       loadJSON('data/training.json').catch(() => null),
     ]);
     // 基础配置(轴范围/标准线)——单一数据源
@@ -963,14 +932,14 @@ function renderReview(rows, daily, goals) {
     try { daily = await loadJSON('data/daily_summary.json'); } catch (e) {}
     for (const key of ['activeEnergy', 'dietaryKcal', 'dietaryProtein', 'dietaryCarbs', 'dietaryFat', 'sleepHours']) {
       const m = METRICS[key];
-      if (!m?.chart) continue;
+      if (!m && m.chart) continue;
       const series = Object.entries(daily).sort(([a], [b]) => a < b ? -1 : 1)
-        .map(([date, v]) => ({ x: date, y: v[key] ?? null }));
+        .map(([date, v]) => ({ x: date, y: v[key] != null ? v[key] : null }));
       renderPlainBarChart(m, series);       // 统一走标准线渲染(无 standard 时纯柱)
     }
 
     renderMacroChart(daily);
-    renderTable(rows, daily); renderFoods(foods); renderNotes(knowledge);
+    renderTable(rows, daily); renderNotes(knowledge);
     renderSettings(goals);
     renderTraining(training);
     renderReview(rows, daily, goals);
