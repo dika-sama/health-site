@@ -153,7 +153,7 @@
     <button class="page-tab" data-page="foods">食物图鉴</button>
     <button class="page-tab" data-page="notes">知识库</button>
     <button class="page-tab" data-page="review">Review</button>
-    <button class="page-tab" data-page="training">训练</button>
+    <button class="page-tab" data-page="training">训练与饮食</button>
     <button class="page-tab" data-page="settings">设置</button>
   </div>
 
@@ -239,7 +239,7 @@
     </div>
   </div>
 
-  <!-- ============ 训练页:左侧行动日列表 + 右侧动作明细 ============ -->
+  <!-- ============ 训练与饮食页:左侧行动日列表 + 右侧动作/饮食明细 ============ -->
   <div class="page" id="page-training">
     <div class="review-layout">
       <div class="review-side card">
@@ -257,14 +257,23 @@
           </table></div>
         </div>
         <div class="card">
+          <h2>🍽️ 三餐怎么吃</h2>
+          <div class="hint">配平目标:蛋白 140g / 碳水 220g / 脂肪 65g ≈ 2050 kcal;先定蛋白,再配主食和菜</div>
+          <div class="scroll"><table id="mealTable">
+            <thead><tr><th>餐次</th><th>蛋白</th><th>热量</th><th>建议吃什么</th><th>替换 / 避雷</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+        <div class="card">
           <h2>📏 周组数核对(每肌群 4-6 组)</h2>
           <div class="hint">肌肉维持的最低有效剂量;低于 4 = 没练够,高于 6 = 恢复不过来(减脂期)</div>
           <div id="weeklySets"></div>
         </div>
         <div class="card">
           <h2>💡 执行规则</h2>
-          <div class="hint">三条规则,比计划本身更重要</div>
+          <div class="hint">训练比计划更重要,饮食比训练更容易破——四条规则</div>
           <div id="trainingRules"></div>
+          <div id="mealRules" style="margin-top:10px"></div>
         </div>
       </div>
     </div>
@@ -682,6 +691,18 @@ function renderTraining(training) {
     <li><b>安排间隔:</b>同一肌群两次训练间隔 ≥48 小时(周一推/周三腿/周五拉正好错开);缺了就跳过,不顺延堆积</li>
     <li><b>进退标准:</b>动作能标准做满上限 → 升级难度;做不到下限 → 降级难度,动作质量优先于次数</li>
   </ul>`;
+  // 三餐表 + 饮食规则
+  if (training.meals?.length) {
+    document.querySelector('#mealTable tbody').innerHTML = training.meals.map(m => `<tr>
+      <td><b>${m.slot}</b></td><td class="num">${m.protein}</td><td class="num">${m.kcal}</td>
+      <td style="font-size:13px">${m.staples}</td><td style="font-size:12px;color:var(--muted)">${m.swaps || ''}</td>
+    </tr>`).join('');
+  }
+  if (training.mealRules?.length) {
+    document.getElementById('mealRules').innerHTML = `<div class="hint" style="margin-bottom:4px">🍽️ 饮食四条</div><ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9">
+      ${training.mealRules.map(r => `<li>${r}</li>`).join('')}
+    </ul>`;
+  }
 }
 
 /* ---------- 分页 ---------- */
