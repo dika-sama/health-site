@@ -1,0 +1,56 @@
+{
+  "xAxisStart": "2026-10-16",
+  "xAxisEnd": "2027-03-31",
+  "standards": {
+    "activeEnergy": {
+      "value": 500,
+      "yMin": 0,
+      "yMax": 1500,
+      "overColor": "green"
+    },
+    "dietaryKcal": {
+      "value": 2050,
+      "yMin": 1500,
+      "yMax": 2500,
+      "overColor": "red"
+    },
+    "dietaryProtein": {
+      "value": 110,
+      "yMin": 50,
+      "yMax": 200,
+      "overColor": "green"
+    },
+    "dietaryCarbs": {
+      "value": 200,
+      "yMin": 100,
+      "yMax": 300,
+      "overColor": "red"
+    },
+    "dietaryFat": {
+      "value": 65,
+      "yMin": 40,
+      "yMax": 120,
+      "overColor": "red"
+    },
+    "sleepHours": {
+      "value": 7,
+      "yMin": 0,
+      "yMax": 12,
+      "overColor": "green"
+    }
+  },
+  "macroRatio": {
+    "proteinPct": {
+      "min": 20,
+      "max": 30
+    },
+    "carbsPct": {
+      "min": 35,
+      "max": 50
+    },
+    "fatPct": {
+      "min": 20,
+      "max": 30
+    }
+  }
+}

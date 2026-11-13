@@ -1,0 +1,40 @@
+[
+  {
+    "id": "weight-0430",
+    "metric": "weight",
+    "label": "体重目标",
+    "start": "2026-10-16",
+    "end": "2027-04-30",
+    "from": 89.3,
+    "to": 75.0,
+    "direction": "down",
+    "curve": "exp",
+    "decay": 0.0055,
+    "note": "数据起点重锚:89.3(10/16) → 75(4/30),稳态速率约0.45-0.5kg/周"
+  },
+  {
+    "id": "fatmass-0430",
+    "metric": "fatMass",
+    "label": "脂肪量目标",
+    "start": "2026-10-16",
+    "end": "2027-04-30",
+    "from": 25.0,
+    "to": 15.5,
+    "direction": "down",
+    "curve": "exp",
+    "decay": 0.0055,
+    "note": "脂肪量 25.0 → 15.5kg(4/30):届时75kg体脂约20.7%,是真实减重构成下的自然落点"
+  },
+  {
+    "id": "musclemass-0430",
+    "metric": "muscleMass",
+    "label": "肌肉量目标",
+    "start": "2026-10-16",
+    "end": "2027-04-30",
+    "from": 60.8,
+    "to": 59.9,
+    "direction": "maintain",
+    "curve": "linear",
+    "note": "肌肉量缓降底线 59.9(4/30):承认缺口下真实损耗0.1-0.2kg/月;周均值判定,跌破=蛋白/训练/睡眠三查"
+  }
+]
