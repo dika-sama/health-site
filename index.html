@@ -6,8 +6,8 @@
 <meta name="robots" content="noindex, nofollow">
 <title>2027减脂计划</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>❤️</text></svg>">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+<script src="vendor/chart.umd.min.js"></script>
+<script src="vendor/chartjs-adapter-date-fns.bundle.min.js"></script>
 <style>
   :root {
     --bg: #f6f7fb;
@@ -912,6 +912,8 @@ function renderReview(rows, daily, goals) {
 }
 
 (async () => {
+  // 分步容错:单步失败只跳过该步(页头提示),不影响其余区块渲染
+  const step = (name, fn) => { try { fn(); } catch (e) { console.error('[' + name + '] 渲染失败:', e); } };
   try {
     const rows = await loadJSON('data/body.json');
     const [goals, knowledge, training] = await Promise.all([
@@ -923,26 +925,34 @@ function renderReview(rows, daily, goals) {
     try { CFG = { ...CFG, ...(await loadJSON('data/config.json')) }; } catch (e) {}
     applyConfig();
 
-    buildChartRows(goals);
-    renderStats(rows);
-    ['fatMass', 'muscleMass', 'weight'].forEach(m => renderMetricChart(m, rows, goals));
+    step('stats', () => renderStats(rows));
+    step('goals', () => buildChartRows(goals));
+    // 图表类:库缺失(老内核/加载失败)时跳过,不阻塞表格与文字
+    const hasChart = typeof Chart !== 'undefined';
+    if (hasChart) {
+      step('trend', () => ['fatMass', 'muscleMass', 'weight'].forEach(m => renderMetricChart(m, rows, goals)));
 
-    // 活动维度: daily_summary.json -> 柱状图,横轴与体重图对齐
-    let daily = {};
-    try { daily = await loadJSON('data/daily_summary.json'); } catch (e) {}
-    for (const key of ['activeEnergy', 'dietaryKcal', 'dietaryProtein', 'dietaryCarbs', 'dietaryFat', 'sleepHours']) {
-      const m = METRICS[key];
-      if (!m && m.chart) continue;
-      const series = Object.entries(daily).sort(([a], [b]) => a < b ? -1 : 1)
-        .map(([date, v]) => ({ x: date, y: v[key] != null ? v[key] : null }));
-      renderPlainBarChart(m, series);       // 统一走标准线渲染(无 standard 时纯柱)
+      // 活动维度: daily_summary.json -> 柱状图,横轴与体重图对齐
+      let daily = {};
+      try { daily = await loadJSON('data/daily_summary.json'); } catch (e) {}
+      for (const key of ['activeEnergy', 'dietaryKcal', 'dietaryProtein', 'dietaryCarbs', 'dietaryFat', 'sleepHours']) {
+        const m = METRICS[key];
+        if (!m || !m.chart) continue;
+        const series = Object.entries(daily).sort(([a], [b]) => a < b ? -1 : 1)
+          .map(([date, v]) => ({ x: date, y: v[key] != null ? v[key] : null }));
+        const s = series;   // 闭包捕获
+        step('bar-' + key, () => renderPlainBarChart(m, s));   // 统一走标准线渲染(无 standard 时纯柱)
+      }
+      step('macro', () => renderMacroChart(daily));
+      step('review', () => renderReview(rows, daily, goals));
+    } else {
+      document.getElementById('updated').textContent = '图表库未加载(网络受限),表格数据不受影响';
     }
 
-    renderMacroChart(daily);
-    renderTable(rows, daily); renderNotes(knowledge);
-    renderSettings(goals);
-    renderTraining(training);
-    renderReview(rows, daily, goals);
+    step('table', () => renderTable(rows, {}));
+    step('notes', () => renderNotes(knowledge));
+    step('settings', () => renderSettings(goals));
+    step('training', () => renderTraining(training));
     const last = rows.length ? rows[rows.length - 1].date : '';
     document.getElementById('updated').textContent = last ? `最近记录 ${last}` : '';
     document.getElementById('updated2').textContent = last;
