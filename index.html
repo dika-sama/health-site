@@ -153,6 +153,7 @@
     <button class="page-tab" data-page="foods">食物图鉴</button>
     <button class="page-tab" data-page="notes">知识库</button>
     <button class="page-tab" data-page="review">Review</button>
+    <button class="page-tab" data-page="training">训练</button>
     <button class="page-tab" data-page="settings">设置</button>
   </div>
 
@@ -233,6 +234,37 @@
           <h2>📐 Review 方法(固定五步)</h2>
           <div class="hint">每次复盘按此执行:①结果 vs 目标曲线 ②行为达标率 ③趋势拐点 ④目标校准 ⑤下期一条重点</div>
           <div id="reviewMethod"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 训练页:左侧行动日列表 + 右侧动作明细 ============ -->
+  <div class="page" id="page-training">
+    <div class="review-layout">
+      <div class="review-side card">
+        <h2>🏋️ 训练日</h2>
+        <div class="hint" id="trainingTargetHint"></div>
+        <div id="trainingList"></div>
+      </div>
+      <div class="review-main">
+        <div class="card">
+          <h2 id="sessionTitle">📝 动作明细</h2>
+          <div class="hint" id="sessionMeta"></div>
+          <div class="scroll"><table id="sessionTable">
+            <thead><tr><th>动作</th><th>肌群</th><th>组数</th><th>次数</th><th>要点</th></tr></thead>
+            <tbody></tbody>
+          </table></div>
+        </div>
+        <div class="card">
+          <h2>📏 周组数核对(每肌群 4-6 组)</h2>
+          <div class="hint">肌肉维持的最低有效剂量;低于 4 = 没练够,高于 6 = 恢复不过来(减脂期)</div>
+          <div id="weeklySets"></div>
+        </div>
+        <div class="card">
+          <h2>💡 执行规则</h2>
+          <div class="hint">三条规则,比计划本身更重要</div>
+          <div id="trainingRules"></div>
         </div>
       </div>
     </div>
@@ -603,6 +635,53 @@ function renderNotes(items) {
   show(sorted[0]);
 }
 
+/* ---------- 训练页:左侧训练日 + 右侧动作明细 + 周组数核对 ---------- */
+function renderTraining(training) {
+  if (!training?.sessions?.length) return;
+  const listEl = document.getElementById('trainingList');
+  const t = training.target;
+  document.getElementById('trainingTargetHint').textContent =
+    `每周 ${t.sessionsPerWeek} 次 · 每肌群周 ${t.setsPerMusclePerWeek.min}-${t.setsPerMusclePerWeek.max} 组(维持剂量)`;
+  const sorted = training.sessions.slice();
+  const totalSets = {};   // 肌群 -> 周组数
+  training.sessions.forEach(s => s.exercises.forEach(e => {
+    totalSets[e.muscle] = (totalSets[e.muscle] || 0) + e.sets;
+  }));
+  const show = (s) => {
+    listEl.querySelectorAll('.review-item').forEach(x => x.classList.toggle('active', x.dataset.id === s.id));
+    document.getElementById('sessionTitle').textContent = `${s.id} · ${s.title}`;
+    document.getElementById('sessionMeta').textContent = `${s.day} · 全部居家可完成 · 总计 ${s.exercises.reduce((a, e) => a + e.sets, 0)} 组`;
+    document.querySelector('#sessionTable tbody').innerHTML = s.exercises.map(e => `<tr>
+      <td>${e.name}</td><td>${e.muscle}</td><td class="num">${e.sets}</td><td>${e.reps}</td><td style="font-size:12px;color:var(--muted)">${e.note || ''}</td>
+    </tr>`).join('');
+  };
+  listEl.innerHTML = sorted.map(s => `
+    <div class="review-item" data-id="${s.id}">
+      <div class="t">${s.id} · ${s.title}</div>
+      <div class="d">${s.day} · ${s.exercises.reduce((a, e) => a + e.sets, 0)} 组</div>
+    </div>`).join('');
+  listEl.querySelectorAll('.review-item').forEach(item => item.onclick = () => {
+    show(sorted.find(s => s.id === item.dataset.id));
+  });
+  show(sorted[0]);
+  // 周组数核对:按肌群汇总,落在 4-6 区间 = 正常
+  const [lo, hi] = [t.setsPerMusclePerWeek.min, t.setsPerMusclePerWeek.max];
+  document.getElementById('weeklySets').innerHTML = `<table>
+    <thead><tr><th>肌群</th><th>周组数</th><th>判定</th></tr></thead>
+    <tbody>${Object.entries(totalSets).map(([m, n]) => {
+      const ok = n >= lo && n <= hi;
+      const tag = ok ? `<span style="color:${GREEN}">✓ 维持剂量</span>`
+        : n > hi ? `<span style="color:var(--muted)">偏多(减脂期恢复有限)</span>`
+        : `<span style="color:${RED}">低于 ${lo},不足</span>`;
+      return `<tr><td>${m}</td><td class="num">${n}</td><td>${tag}</td></tr>`;
+    }).join('')}</tbody></table>`;
+  document.getElementById('trainingRules').innerHTML = `<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9">
+    <li><b>强度判断:</b>每组做到「还能再做 2 次」就停下;能轻松做满上限次数,下次就加难度(垫高脚/负重/换更难变式)</li>
+    <li><b>安排间隔:</b>同一肌群两次训练间隔 ≥48 小时(周一推/周三腿/周五拉正好错开);缺了就跳过,不顺延堆积</li>
+    <li><b>进退标准:</b>动作能标准做满上限 → 升级难度;做不到下限 → 降级难度,动作质量优先于次数</li>
+  </ul>`;
+}
+
 /* ---------- 分页 ---------- */
 document.querySelectorAll('.page-tab').forEach(btn => btn.onclick = () => {
   document.querySelectorAll('.page-tab').forEach(b => b.classList.remove('active'));
@@ -836,9 +915,10 @@ function renderReview(rows, daily, goals) {
 (async () => {
   try {
     const rows = await loadJSON('data/body.json');
-    const [goals, foods, knowledge] = await Promise.all([
+    const [goals, foods, knowledge, training] = await Promise.all([
       loadJSON('data/goals.json').catch(() => []),
       loadJSON('data/foods.json'), loadJSON('data/knowledge.json').catch(() => []),
+      loadJSON('data/training.json').catch(() => null),
     ]);
     // 基础配置(轴范围/标准线)——单一数据源
     try { CFG = { ...CFG, ...(await loadJSON('data/config.json')) }; } catch (e) {}
@@ -862,6 +942,7 @@ function renderReview(rows, daily, goals) {
     renderMacroChart(daily);
     renderTable(rows, daily); renderFoods(foods); renderNotes(knowledge);
     renderSettings(goals);
+    renderTraining(training);
     renderReview(rows, daily, goals);
     const last = rows.length ? rows[rows.length - 1].date : '';
     document.getElementById('updated').textContent = last ? `最近记录 ${last}` : '';
