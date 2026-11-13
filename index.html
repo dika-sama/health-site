@@ -895,7 +895,13 @@ function renderReview(rows, daily, goals) {
       listEl.querySelectorAll('.review-item').forEach(x => x.classList.toggle('active', x.dataset.date === r.date));
       document.getElementById('reviewDetailTitle').textContent = `📝 ${r.title}`;
       document.getElementById('reviewDetailMeta').textContent = `${r.date} · ${r.period}`;
+      const VC = { good: [GREEN, '✓'], warning: ['#e08c2f', '⚠'], bad: [RED, '✗'] };
+      const [vc, vi] = VC[r.verdict] ?? VC.warning;
       document.getElementById('reviewDetailBody').innerHTML = `
+        ${r.summary ? `<div style="border-left:3px solid ${vc};background:${vc}14;padding:10px 14px;margin-bottom:14px;border-radius:0 6px 6px 0">
+          <div style="font-size:14px;font-weight:700;color:${vc};margin-bottom:4px">${vi} 本期判定</div>
+          <div style="font-size:13px;line-height:1.7">${r.summary}</div>
+        </div>` : ''}
         <div class="note" style="border:none;padding-top:4px">
           <div class="c">${r.conclusion}</div>
           <div class="d" style="margin-top:8px">📌 下期重点:${r.focus ?? '—'}</div>
