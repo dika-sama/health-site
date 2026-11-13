@@ -664,11 +664,13 @@ function renderTraining(training) {
     show(sorted.find(s => s.id === item.dataset.id));
   });
   show(sorted[0]);
-  // 周组数核对:按肌群汇总,落在 4-6 区间 = 正常
+  // 周组数核对:大肌群按 4-6 判定;小肌群(三头/二头/小腿/核心等)随复合动作连带刺激,不做硬指标
+  const MAJOR = ['胸', '背', '肩', '腿', '臀'];
   const [lo, hi] = [t.setsPerMusclePerWeek.min, t.setsPerMusclePerWeek.max];
   document.getElementById('weeklySets').innerHTML = `<table>
     <thead><tr><th>肌群</th><th>周组数</th><th>判定</th></tr></thead>
     <tbody>${Object.entries(totalSets).map(([m, n]) => {
+      if (!MAJOR.includes(m)) return `<tr><td>${m}</td><td class="num">${n}</td><td><span style="color:var(--muted)">辅助肌群 · 随复合动作连带刺激,不单独计数</span></td></tr>`;
       const ok = n >= lo && n <= hi;
       const tag = ok ? `<span style="color:${GREEN}">✓ 维持剂量</span>`
         : n > hi ? `<span style="color:var(--muted)">偏多(减脂期恢复有限)</span>`
