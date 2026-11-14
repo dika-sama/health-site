@@ -1,0 +1,761 @@
+
+const RED = '#d05656';
+const GREEN = '#2fa46b';
+// 图表基础配置(轴范围/标准线)从 config.json 动态加载,单一数据源
+let CFG = { xAxisStart: '2026-10-12', xAxisEnd: '2027-03-31', standards: {} };
+const METRICS = {
+  weight:     { label: '体重 (kg)',     color: '#d05656', chart: 'chart-weight' },
+  fatMass:    { label: '脂肪量 (kg)',   color: '#e08c2f', chart: 'chart-fatMass' },
+  muscleMass: { label: '肌肉量 (kg)',   color: '#4f7cff', chart: 'chart-muscleMass' },
+  // 占比指标由绝对量现场计算: 体脂率=fatMass/weight, 肌肉率=muscleMass/weight (不再直接记录)
+  // 以下维度的 standard/dailyGoal/yMin/yMax/overColor 全部由 CFG.standards 注入
+  activeEnergy:   { label: '活动消耗 (kcal)', color: '#e08c2f', chart: 'chart-activeEnergy',   bar: true },
+  dietaryKcal:    { label: '热量 (kcal)',     color: '#f0c419', chart: 'chart-dietaryKcal',    bar: true },
+  dietaryProtein: { label: '蛋白质 (g)',      color: '#f0c419', chart: 'chart-dietaryProtein', bar: true },
+  dietaryCarbs:   { label: '碳水 (g)',        color: '#f0c419', chart: 'chart-dietaryCarbs',   bar: true },
+  dietaryFat:     { label: '脂肪 (g)',        color: '#f0c419', chart: 'chart-dietaryFat',     bar: true },
+  sleepHours:     { label: '睡眠 (小时)',      color: '#9b59b6', chart: 'chart-sleepHours',     bar: true },
+};
+function applyConfig() {
+  for (const [key, std] of Object.entries(CFG.standards || {})) {
+    const m = METRICS[key];
+    if (!m) continue;
+    m.standard = std.value;              // 统一字段:标准线值
+    m.dailyGoal = std.value;             // 兼容活动图旧字段
+    m.yMin = std.yMin; m.yMax = std.yMax;
+    m.overColor = std.overColor === 'green' ? GREEN : RED;
+  }
+}
+
+async function loadJSON(p) {
+  const r = await fetch(p + '?t=' + Date.now());
+  if (!r.ok) throw new Error(p + ' ' + r.status);
+  return r.json();
+}
+
+function fmt(n) { return (n == null || n === '') ? '' : Number(n).toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1'); }
+
+/* ---------- 汇总页:指标卡 ---------- */
+// 训练三块的判定顺序与颜色(数据页训练列/汇总页共用)
+const order3 = ['推', '腿', '拉'];
+const TRAIN_COLORS = { 推: RED, 腿: '#e08c2f', 拉: '#4f7cff' };
+// 占比指标现场计算:体脂率 = fatMass/weight, 肌肉率 = muscleMass/weight
+const derived = (r) => ({
+  ...r,
+  bodyFat: r.fatMass / r.weight * 100,
+  muscle: r.muscleMass / r.weight * 100,
+});
+function renderStats(rowsRaw, trainLogToday) {
+  const el = document.getElementById('stats');
+  if (!rowsRaw.length) { el.innerHTML = ''; return; }
+  const rows = rowsRaw.map(derived);
+  const latest = rows[rows.length - 1], first = rows[0];
+  // [标签, 当前值, 单位, 绝对变化, 变化方向(+1=数值上升/-1=下降)]
+  const items = [
+    ['最新体重', fmt(latest.weight), 'kg', Math.abs(first.weight - latest.weight), latest.weight > first.weight ? 1 : -1],
+    ['体脂率', fmt(latest.bodyFat), '%', Math.abs(first.bodyFat - latest.bodyFat), latest.bodyFat > first.bodyFat ? 1 : -1],
+    ['肌肉率', fmt(latest.muscle), '%', Math.abs(latest.muscle - first.muscle), latest.muscle > first.muscle ? 1 : -1],
+    ['脂肪量', fmt(latest.fatMass), 'kg', Math.abs(first.fatMass - latest.fatMass), latest.fatMass > first.fatMass ? 1 : -1],
+    ['肌肉量', fmt(latest.muscleMass), 'kg', Math.abs(latest.muscleMass - first.muscleMass), latest.muscleMass > first.muscleMass ? 1 : -1],
+  ];
+  el.innerHTML = items.map(([label, value, unit, abs, dir]) => {
+    const word = dir > 0 ? '累计上升' : '累计降低';
+    return `<div class="stat"><div class="label">${label}</div>
+      <div class="value">${value}<small>${unit}</small> <span class="delta">${word} ${fmt(abs)}${unit}</span></div></div>`;
+  }).join('');
+  // 当天训练状态行:练了哪几块,三色块标识(与数据页「训练」列同源)
+  const trainEl = document.getElementById('todayTrain');
+  if (trainEl) {
+    const tag = trainLogToday ? trainTag(trainLogToday) : '';
+    const hitBlocks = order3.filter(g => tag.indexOf(TRAIN_COLORS[g]) >= 0);
+    trainEl.innerHTML = hitBlocks.length
+      ? `🏋️ 今日已练:<b>${hitBlocks.join(' + ')}</b> <span style="display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle">${hitBlocks.map(g => `<span style="width:12px;height:12px;border-radius:3px;background:${TRAIN_COLORS[g]};display:inline-block"></span>`).join('')}</span>`
+      : `🏋️ 今日还未记录训练`;
+  }
+}
+
+/* ---------- 目标趋势线 ---------- */
+// 目标线:linear = 匀速直线;exp = 指数衰减(前期快后期慢,符合减重生理规律)
+// exp 模型:w(t) = to + (from - to) * (1 - e^(-k·n)) / (1 - e^(-k·N)),n=第几天,N=总天数
+// decay 参数 k 控制前快后慢的程度(k 越大前期越陡);from/to 为锚点,曲线过两端点
+function goalDataset(g) {
+  const start = new Date(g.start + 'T00:00:00'), end = new Date(g.end + 'T00:00:00');
+  const span = end - start;
+  const N = span / 86400e3;
+  const k = g.decay != null ? g.decay : 0.0075;
+  const isExp = g.curve === 'exp';
+  const valAt = (t) => {
+    const n = (t - start.getTime()) / 86400e3;
+    if (!isExp) return g.from + (g.to - g.from) * (n / N);
+    const denom = 1 - Math.exp(-k * N);
+    return g.to + (g.from - g.to) * (Math.exp(-k * n) - Math.exp(-k * N)) / denom;
+  };
+  const pts = [];
+  // 每 3 天一个点,铺满整个周期
+  for (let t = start.getTime(); t <= end.getTime(); t += 3 * 86400e3) {
+    pts.push({ x: new Date(t), y: valAt(t) });
+  }
+  pts.push({ x: end, y: g.to });
+  return {
+    label: `目标 → ${fmt(g.to)}${g.metric.includes('%') || METRICS[g.metric] ? '' : ''}`,
+    data: pts,
+    borderColor: METRICS[g.metric].color + '88',
+    borderDash: [6, 6],
+    borderWidth: 2,
+    pointRadius: 0,
+    tension: 0,
+    fill: false,
+  };
+}
+
+/* ---------- 三张独立趋势图 ---------- */
+const charts = {};
+// Chart.js 内联插件:在首点和末点正上方画数据标注(每次绘制实时取点位置,resize 不飘)
+const pointLabelPlugin = {
+  id: 'pointLabel',
+  afterDatasetsDraw(chart) {
+    const labels = chart.$pointLabels || [];   // [{ idx, text, color }]
+    const meta = chart.getDatasetMeta(0);
+    const { ctx } = chart;
+    ctx.save();
+    ctx.font = '600 12px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif';
+    ctx.textBaseline = 'bottom';
+    ctx.textAlign = 'center';
+    for (const { idx, text, color } of labels) {
+      const p = meta.data[idx];
+      if (!p) continue;
+      ctx.fillStyle = color;
+      ctx.fillText(text, p.x, p.y - 12);
+    }
+    ctx.restore();
+  },
+};
+
+function renderMetricChart(metric, rowsRaw, goals) {
+  const m = METRICS[metric];
+  const g = (goals || []).find(x => x.metric === metric);
+  const rows = rowsRaw.map(derived);   // 现场计算占比字段(bodyFat/muscle)
+
+  // 达成率 = 当前总进度:实际完成变化 ÷ 目标总变化(方向自适应,不看时间进度)
+  let rate = null;
+  if (g) {
+    const total = Math.abs(g.to - g.from);
+    const latest = rows[rows.length - 1];
+    if (latest && total > 0.0001) {
+      const done = g.to > g.from ? latest[metric] - g.from : g.from - latest[metric];
+      rate = Math.round(Math.max(0, Math.min(1, done / total)) * 100);
+    }
+  }
+
+  const actual = {
+    label: m.label,
+    data: rows.map(r => ({ x: r.date, y: r[metric] })),
+    borderColor: m.color,
+    borderWidth: 2.5, tension: 0.35, pointRadius: 3, pointHoverRadius: 5,
+    fill: false,
+  };
+  const goalLines = (goals || []).filter(x => x.metric === metric).map(goalDataset);
+  const canvas = document.getElementById(m.chart);
+  if (!canvas) return;
+  if (charts[metric]) { charts[metric].destroy(); }
+  charts[metric] = new Chart(canvas, {
+    type: 'line',
+    data: { datasets: [actual, ...goalLines] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: false },
+      parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+      layout: { padding: { top: 24, right: 0, left: 0 } },
+      scales: {
+        x: { type: 'time', min: CFG.xAxisStart, max: CFG.xAxisEnd, time: { unit: 'week', displayFormats: { week: 'M/d' } } },
+        y: { grace: '8%', afterFit: (sc) => { sc.width = 46; } },   // 固定 y 轴宽,保证横向对齐
+      },
+      plugins: { legend: { display: false } },
+    },
+    plugins: [pointLabelPlugin],
+  });
+
+  // 标注定义:首点(起始值) + 末点(当前值[+达成率]),像素位置由插件绘制时实时取
+  const labels = [];
+  const unitM = m.label.match(/\((.+)\)/);
+  const unit = unitM ? unitM[1] : '';
+  labels.push({ idx: 0, text: `${fmt(rows[0][metric])}${unit}`, color: m.color });
+  if (rows.length > 1) {
+    const text = rate !== null
+      ? `${fmt(rows[rows.length - 1][metric])}${unit}（达成率 ${rate}%）`
+      : `${fmt(rows[rows.length - 1][metric])}${unit}`;
+    labels.push({ idx: rows.length - 1, text, color: m.color });
+  }
+  charts[metric].$pointLabels = labels;
+}
+
+/* ---------- 活动维度柱状图(水平目标虚线,纵轴固定范围,横轴与趋势图一致) ---------- */
+function renderBarChart(m, series) {
+  // 与饮食图同构:标准线横贯全图,超出目标的部分堆叠展示(活动消耗=绿色,达标是好事)
+  renderPlainBarChart({ ...m, standard: m.dailyGoal, overColor: m.overColor != null ? m.overColor : GREEN }, series);
+}
+
+/* ---------- 饮食柱状图(黄色柱,标准虚线横贯全图,超标准标红/绿色) ---------- */
+function renderPlainBarChart(m, series) {
+  const canvas = document.getElementById(m.chart);
+  if (!canvas || !series.length) return;
+
+  const datasets = [];
+  if (m.standard != null) {
+    // 堆叠两段:黄色段 = min(值, 标准);超出段 = |值-标准|,颜色由 overColor 决定(默认红,可绿)
+    const overColor = (m.overColor != null ? m.overColor : RED) + 'cc';
+    const base = series.map(p => ({ x: p.x, y: p.y == null ? null : Math.min(p.y, m.standard) }));
+    const over = series.map(p => ({ x: p.x, y: p.y == null || p.y <= m.standard ? null : p.y - m.standard }));
+    datasets.push(
+      { label: m.label, type: 'bar', data: base, backgroundColor: m.color + 'cc',
+        borderRadius: 3, barPercentage: 0.8, categoryPercentage: 0.9, stack: 's' },
+      { label: '超出', type: 'bar', data: over, backgroundColor: overColor,
+        borderRadius: 3, barPercentage: 0.8, categoryPercentage: 0.9, stack: 's' },
+    );
+    // 标准虚线:横贯整个时间轴(轴首 → 轴尾),不只到数据处
+    datasets.push({
+      label: '标准', type: 'line',
+      data: [{ x: CFG.xAxisStart, y: m.standard }, { x: CFG.xAxisEnd, y: m.standard }],
+      borderColor: RED + '99', borderDash: [6, 6], borderWidth: 1.5,
+      pointRadius: 0, tension: 0, fill: false,
+    });
+  } else {
+    datasets.push({ label: m.label, type: 'bar', data: series, backgroundColor: m.color + 'cc',
+      borderRadius: 3, barPercentage: 0.8, categoryPercentage: 0.9 });
+  }
+
+  if (charts[m.chart]) charts[m.chart].destroy();
+  // 悬停提示:显示当天总量(黄段+超出段之和),不显示堆叠分段
+  const totalLookup = Object.fromEntries(series.map(p => [String(p.x).slice(0, 10), p.y]));
+  const tooltipCfg = {
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        filter: (item) => item.datasetIndex !== 2,             // 不提示标准线
+        callbacks: {
+          title: (items) => (items[0] && items[0].parsed && items[0].parsed.x != null)
+            ? new Date(items[0].parsed.x).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+            : '',
+          label: (item) => {
+            const d = new Date(item.parsed.x).toISOString().slice(0, 10);
+            const total = totalLookup[d];
+            return total == null ? '' : `${m.label}: ${fmt(total)}`;
+          },
+        },
+      },
+    },
+  };
+  charts[m.chart] = new Chart(canvas, {
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: false },
+      parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+      scales: {
+        x: { type: 'time', min: CFG.xAxisStart, max: CFG.xAxisEnd, offset: false, time: { unit: 'week', displayFormats: { week: 'M/d' } } },
+        y: { min: m.yMin, max: m.yMax, stacked: m.standard != null, afterFit: (sc) => { sc.width = 46; } },
+      },
+      ...tooltipCfg,
+    },
+  });
+}
+
+/* ---------- 目标 chips(已并入指标卡,保留函数备查) ---------- */
+
+/* ---------- 表格页:每日全量汇总(身体+活动+饮食+训练) ---------- */
+// 训练块 → 颜色:推=红 腿=橙 拉=蓝;由动作名关键词判定
+const TRAIN_KEYS = {
+  推: ['俯卧撑', '卧推', '推举', '臂屈伸', '飞鸟'],
+  腿: ['蹲', '箭步', '臀桥', '硬拉', '提踵'],
+  拉: ['划船', '弯举', '超人', '反向飞鸟', '支撑划船'],
+};
+function trainTag(items) {
+  if (!items || !items.length) return '';
+  const hit = {};
+  items.forEach(i => {
+    for (const g in TRAIN_KEYS) if (TRAIN_KEYS[g].some(k => i.name.indexOf(k) >= 0)) hit[g] = true;
+  });
+  return order3.filter(g => hit[g]).map(g =>
+    `<span title="${g}" style="display:inline-block;width:14px;height:14px;border-radius:4px;background:${TRAIN_COLORS[g]};margin-right:4px;vertical-align:middle"></span>`
+  ).join('');
+}
+function renderTable(rowsRaw, daily, trainLog) {
+  const tb = document.querySelector('#bodyTable tbody');
+  const rows = rowsRaw.map(derived);
+  const trainByDate = {};
+  (trainLog || []).forEach(r => { trainByDate[r.date] = r.items; });
+  const allDates = [...new Set([...rows.map(r => r.date), ...Object.keys(daily), ...Object.keys(trainByDate)])].sort().reverse();
+  const rowOf = (d) => rows.find(r => r.date === d);
+  const day = (d) => daily[d] || {};
+  tb.innerHTML = allDates.map(d => {
+    const r = rowOf(d) || {};
+    const s = day(d);
+    return `<tr>
+      <td>${d}</td>
+      <td>${trainTag(trainByDate[d])}</td>
+      <td class="num">${fmt(r.weight)}</td><td class="num">${fmt(r.fatMass)}</td><td class="num">${fmt(r.muscleMass)}</td>
+      <td class="num">${r.fatMass ? fmt(r.bodyFat, 1) : ''}</td><td class="num">${r.muscleMass ? fmt(r.muscle, 1) : ''}</td>
+      <td class="num">${fmt(s.activeEnergy)}</td><td class="num">${fmt(s.dietaryKcal)}</td>
+      <td class="num">${fmt(s.dietaryProtein)}</td><td class="num">${fmt(s.dietaryCarbs)}</td><td class="num">${fmt(s.dietaryFat)}</td><td class="num">${fmt(s.sleepHours)}</td>
+      <td>${r.note || ''}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ---------- 知识库:左列表 + 右正文 ---------- */
+function renderNotes(items) {
+  const listEl = document.getElementById('notesList');
+  if (!items || !items.length) {
+    listEl.innerHTML = '<div class="empty">还没有知识条目</div>';
+    document.getElementById('noteDetailBody').innerHTML = '<div class="empty">调研沉淀后这里会显示正文</div>';
+    return;
+  }
+  const sorted = items.slice().sort((a, b) => a.date < b.date ? 1 : -1);
+  const show = (n) => {
+    listEl.querySelectorAll('.review-item').forEach(x => x.classList.toggle('active', x.dataset.id === n.id));
+    document.getElementById('noteDetailTitle').textContent = `📖 ${n.title}`;
+    document.getElementById('noteDetailMeta').textContent = `${n.date}${(n.tags && n.tags.length) ? ' · ' + n.tags.join(' / ') : ''}`;
+    // 渲染:文本段 + 表格段 + 列表段 + 内嵌图表段(图表定义在 n.charts)
+    document.getElementById('noteDetailBody').innerHTML = n.body.map(sec => {
+      if (sec.chart) return `<div class="kb-chart"><canvas id="${sec.chart}"></canvas></div>`;
+      const listHtml = (sec.list && sec.list.length)
+        ? `<ul class="kb-list">${sec.list.map(li => `<li>${li}</li>`).join('')}</ul>` : '';
+      const tableHtml = sec.table
+        ? `<div class="scroll"><table class="kb-table">
+            <thead><tr>${sec.table.headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+            <tbody>${sec.table.rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
+          </table></div>` : '';
+      return `<div class="kb-sec"><h3>${sec.h}</h3>${sec.p ? `<p>${sec.p}</p>` : ''}${listHtml}${tableHtml}${sec.p2 ? `<p style="margin-top:8px">${sec.p2}</p>` : ''}</div>`;
+    }).join('');
+    // 建图
+    (n.charts || []).forEach(spec => {
+      const canvas = document.getElementById(spec.id);
+      if (!canvas) return;
+      if (charts['kb-' + spec.id]) charts['kb-' + spec.id].destroy();
+      const ds = spec.datasets.map(d => ({
+        ...d,
+        type: d.type != null ? d.type : (spec.type != null ? spec.type : 'bar'),
+        backgroundColor: (d.backgroundColor != null ? d.backgroundColor : (d.color != null ? d.color : '#4f7cff')) + 'cc',
+        borderColor: d.borderColor != null ? d.borderColor : (d.color != null ? d.color : '#4f7cff'),
+        borderRadius: 3, barPercentage: 0.8, categoryPercentage: 0.9,
+      }));
+      charts['kb-' + spec.id] = new Chart(canvas, {
+        data: { datasets: ds },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: 'nearest', intersect: false },
+          parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+          indexAxis: spec.horizontal ? 'y' : 'x',
+          scales: spec.scales || { y: { beginAtZero: true } },
+          plugins: {
+            legend: spec.legend === false ? { display: false } : { display: true, position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+            tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${item.parsed[spec.horizontal ? 'x' : 'y']}%` } },
+          },
+        },
+      });
+    });
+  };
+  listEl.innerHTML = sorted.map(n => `
+    <div class="review-item" data-id="${n.id}">
+      <div class="t">${n.title}</div>
+      <div class="d">${n.date}${(n.tags && n.tags.length) ? ' · ' + n.tags[0] : ''}</div>
+    </div>`).join('');
+  listEl.querySelectorAll('.review-item').forEach(item => item.onclick = () => {
+    show(sorted.find(n => n.id === item.dataset.id));
+  });
+  show(sorted[0]);
+}
+
+/* ---------- 训练打卡:读 training_log.json(AI 维护),最新在上 ---------- */
+function renderCheckin(log) {
+  const logBox = document.getElementById('trainLogBox');
+  if (!logBox) return;
+  if (!log || !log.length) { logBox.innerHTML = '<div class="empty">还没有打卡记录</div>'; return; }
+  const today = new Date();
+  const tStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+  const sorted = log.slice().sort((a, b) => a.date < b.date ? 1 : -1);
+  logBox.innerHTML = sorted.map(r => {
+    const parts = r.items.map(i => `${i.name}${i.sets > 1 ? '×' + i.sets + '组' : ''}`);
+    const isToday = r.date === tStr;
+    return `<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+      <div style="min-width:52px;color:${isToday ? 'var(--accent)' : 'var(--muted)'};font-weight:${isToday ? '700' : '400'}">${r.date.slice(5)}${isToday ? ' 今' : ''}</div>
+      <div style="flex:1">${parts.join(' · ')}${r.note ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${r.note}</div>` : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+/* ---------- 训练页:左侧训练日 + 右侧动作明细 + 周组数核对 ---------- */
+function renderTraining(training) {
+  if (!training && training.sessions && training.sessions.length) return;
+  const listEl = document.getElementById('trainingList');
+  const t = training.target;
+  document.getElementById('trainingTargetHint').textContent =
+    `每周 ${t.sessionsPerWeek} 次 · 每肌群周 ${t.setsPerMusclePerWeek.min}-${t.setsPerMusclePerWeek.max} 组(维持剂量)`;
+  const sorted = training.sessions.slice();
+  const totalSets = {};   // 肌群 -> 周组数
+  training.sessions.forEach(s => s.exercises.forEach(e => {
+    totalSets[e.muscle] = (totalSets[e.muscle] || 0) + e.sets;
+  }));
+  // 器械模式:自重 / 哑铃(有哑铃时动作升级为哑铃版,同一结构)
+  let equip = '自重';
+  const show = (s) => {
+    listEl.querySelectorAll('.review-item').forEach(x => x.classList.toggle('active', x.dataset.id === s.id));
+    document.getElementById('sessionTitle').textContent = `${s.id} · ${s.title}`;
+    document.getElementById('sessionMeta').textContent = `${s.day} · ${equip}模式 · 总计 ${s.exercises.reduce((a, e) => a + e.sets, 0)} 组`;
+    const useDb = equip === '哑铃';
+    document.querySelector('#sessionTable thead').innerHTML = useDb
+      ? '<tr><th>动作(哑铃版)</th><th>肌群</th><th>组数</th><th>次数</th><th>要点</th></tr>'
+      : '<tr><th>动作</th><th>肌群</th><th>组数</th><th>次数</th><th>要点</th></tr>';
+    document.querySelector('#sessionTable tbody').innerHTML = s.exercises.map(e => `<tr>
+      <td>${useDb && e.db ? e.name.split('(')[0] + ' → ' + e.db.split(':')[0] : e.name}</td>
+      <td>${e.muscle}</td><td class="num">${e.sets}</td><td>${e.reps}</td>
+      <td style="font-size:12px;color:var(--muted)">${useDb && e.db ? e.db.split(':').slice(1).join(':') || e.db : (e.note || '')}</td>
+    </tr>`).join('');
+  };
+  // 模式切换按钮(有哑铃数据时才显示)
+  if (sorted.some(s => s.exercises.some(e => e.db))) {
+    const hintEl = document.getElementById('trainingTargetHint');
+    const renderSwitch = () => {
+      hintEl.innerHTML = `每周 ${t.sessionsPerWeek} 次 · 每肌群周 ${t.setsPerMusclePerWeek.min}-${t.setsPerMusclePerWeek.max} 组(维持剂量) &nbsp;
+        <button id="equipBtn" style="border:1px solid var(--border);background:${equip === '哑铃' ? 'var(--accent-soft)' : 'var(--card)'};color:${equip === '哑铃' ? 'var(--accent)' : 'var(--muted)'};border-radius:999px;padding:3px 12px;font-size:12px;cursor:pointer"> dumbbell模式:切换为${equip === '哑铃' ? '自重' : '哑铃'}版 </button>`;
+      document.getElementById('equipBtn').onclick = () => { equip = equip === '哑铃' ? '自重' : '哑铃'; renderSwitch(); show(sorted.find(x => x.id === (document.querySelector('.review-item.active') || {}).dataset ? sorted.find(x => x.id === document.querySelector('.review-item.active').dataset.id) : sorted[0])); };
+    };
+    renderSwitch();
+  } else {
+    document.getElementById('trainingTargetHint').textContent =
+      `每周 ${t.sessionsPerWeek} 次 · 每肌群周 ${t.setsPerMusclePerWeek.min}-${t.setsPerMusclePerWeek.max} 组(维持剂量)`;
+  }
+  listEl.innerHTML = sorted.map(s => `
+    <div class="review-item" data-id="${s.id}">
+      <div class="t">${s.id} · ${s.title}</div>
+      <div class="d">${s.day} · ${s.exercises.reduce((a, e) => a + e.sets, 0)} 组</div>
+    </div>`).join('');
+  listEl.querySelectorAll('.review-item').forEach(item => item.onclick = () => {
+    show(sorted.find(s => s.id === item.dataset.id));
+  });
+  show(sorted[0]);
+  // 周组数核对:大肌群按 4-6 判定;小肌群(三头/二头/小腿/核心等)随复合动作连带刺激,不做硬指标
+  const MAJOR = ['胸', '背', '肩', '腿', '臀'];
+  const [lo, hi] = [t.setsPerMusclePerWeek.min, t.setsPerMusclePerWeek.max];
+  document.getElementById('weeklySets').innerHTML = `<table>
+    <thead><tr><th>肌群</th><th>周组数</th><th>判定</th></tr></thead>
+    <tbody>${Object.entries(totalSets).map(([m, n]) => {
+      if (!MAJOR.includes(m)) return `<tr><td>${m}</td><td class="num">${n}</td><td><span style="color:var(--muted)">辅助肌群 · 随复合动作连带刺激,不单独计数</span></td></tr>`;
+      const ok = n >= lo && n <= hi;
+      const tag = ok ? `<span style="color:${GREEN}">✓ 维持剂量</span>`
+        : n > hi ? `<span style="color:var(--muted)">偏多(减脂期恢复有限)</span>`
+        : `<span style="color:${RED}">低于 ${lo},不足</span>`;
+      return `<tr><td>${m}</td><td class="num">${n}</td><td>${tag}</td></tr>`;
+    }).join('')}</tbody></table>`;
+  document.getElementById('trainingRules').innerHTML = `<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9">
+    <li><b>强度判断:</b>每组做到「还能再做 2 次」就停下;能轻松做满上限次数,下次就加难度(垫高脚/负重/换更难变式)</li>
+    <li><b>安排间隔:</b>同一肌群两次训练间隔 ≥48 小时(周一推/周三腿/周五拉正好错开);缺了就跳过,不顺延堆积</li>
+    <li><b>酸痛判读:</b>新动作后 24-48h 的酸痛(DOMS)= 正常,不作为加练理由;关节刺痛 = 停,肌肉酸痛 = 可轻量继续</li>
+    <li><b>进退标准:</b>动作能标准做满上限 → 升级难度;做不到下限 → 降级难度,动作质量优先于次数</li>
+  </ul>`;
+  // 三餐表 + 饮食规则
+  if (training.meals && training.meals.length) {
+    document.querySelector('#mealTable tbody').innerHTML = training.meals.map(m => `<tr>
+      <td><b>${m.slot}</b></td><td class="num">${m.protein}</td><td class="num">${m.kcal}</td>
+      <td style="font-size:13px">${m.staples}</td><td style="font-size:12px;color:var(--muted)">${m.swaps || ''}</td>
+    </tr>`).join('');
+  }
+  if (training.mealRules && training.mealRules.length) {
+    document.getElementById('mealRules').innerHTML = `<div class="hint" style="margin-bottom:4px">🍽️ 饮食四条</div><ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9">
+      ${training.mealRules.map(r => `<li>${r}</li>`).join('')}
+    </ul>`;
+  }
+}
+
+/* ---------- 分页 ---------- */
+document.querySelectorAll('.page-tab').forEach(btn => btn.onclick = () => {
+  document.querySelectorAll('.page-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('page-' + btn.dataset.page).classList.add('active');
+});
+
+/* ---------- 动态图行与 hint(单一数据源:goals + CFG) ---------- */
+function metricHint(key, goals) {
+  const gs = (goals || []).filter(g => g.metric === key);
+  const m = METRICS[key];
+  if (gs.length) {
+    // 多段目标:第一段写完整起止,后续段只写「→ 终值(日期)」;日期统一 M/D
+    const fmtDate = (d) => { const [, mm, dd] = d.split('-'); return `${+mm}/${+dd}`; };
+    if (gs.length === 1) {
+      const g = gs[0];
+      if (g.from === g.to) return `目标 ${g.direction === 'maintain' ? '≥' : ''} ${fmt(g.to)} 维持（${fmtDate(g.end)}）`;
+      return `目标 ${fmt(g.from)} → ${fmt(g.to)}（${fmtDate(g.end)}）`;
+    }
+    const first = gs[0], last = gs[gs.length - 1];
+    const mid = gs.slice(1).map(g => `→ ${fmt(g.to)}（${fmtDate(g.end)}）`).join(' ');
+    if (first.from === first.to) return `目标 ≥ ${fmt(first.to)}，${mid}`;
+    return `目标 ${fmt(first.from)} → ${fmt(first.to)} ${mid}`;
+  }
+  const std = m.standard;
+  if (std != null) return `标准 ${fmt(std)}，${m.overColor === GREEN ? '超出 = 绿色' : '红色 = 超出'}`;
+  return '';
+}
+
+function buildChartRows(goals) {
+  const order = ['fatMass', 'muscleMass', 'weight', 'activeEnergy', 'dietaryKcal', 'dietaryProtein', 'dietaryCarbs', 'dietaryFat', 'sleepHours'];
+  const emoji = { fatMass: '📉', muscleMass: '💪', weight: '⚖️', activeEnergy: '🏃', dietaryKcal: '🔥', dietaryProtein: '🥩', dietaryCarbs: '🍚', dietaryFat: '🧈', sleepHours: '😴' };
+  const el = document.getElementById('chartRows');
+  el.innerHTML = order.map(key => {
+    const m = METRICS[key];
+    return `<div class="chart-row">
+      <div class="row-head"><h2>${emoji[key]} ${m.label.replace(/ \(.+\)/, '')} <small>${((m.label.match(/\((.+)\)/) || ['', ''])[1])}</small></h2>
+        <div class="hint" id="hint-${key}">${metricHint(key, goals)}</div></div>
+      <div class="chart-box"><canvas id="${m.chart}"></canvas></div>
+    </div>`;
+  }).join('');
+  // 目标卡标题:取全部目标的最新 end
+  const ends = (goals || []).map(g => g.end).sort();
+  document.getElementById('goalTitle').textContent = `🎯 目标（至 ${ends.length ? ends[ends.length - 1] : CFG.xAxisEnd}）`;
+}
+
+/* ---------- 设置页:参数一览 ---------- */
+function renderSettings(goals) {
+  const el = document.getElementById('settingsBody');
+  const goalRows = (goals || []).map(g => `<tr>
+    <td>${g.label}</td><td>${g.metric}</td><td>${g.start} ~ ${g.end}</td>
+    <td class="num">${fmt(g.from)} → ${fmt(g.to)}</td>
+    <td>${g.curve === 'exp' ? `指数衰减 k=${g.decay}` : '线性'}</td>
+    <td>${g.note || ''}</td>
+  </tr>`).join('');
+  const stdRows = Object.entries(CFG.standards).map(([key, s]) => `<tr>
+    <td>${METRICS[key] && METRICS[key].label ? METRICS[key].label : key}</td>
+    <td class="num">${fmt(s.value)}</td>
+    <td class="num">${s.yMin} ~ ${s.yMax}</td>
+    <td>${s.overColor === 'green' ? '超出=绿' : '超出=红'}</td>
+  </tr>`).join('');
+  el.innerHTML = `
+    <table style="margin-bottom:20px">
+      <thead><tr><th>目标</th><th>指标</th><th>时间</th><th>从 → 到</th><th>曲线</th><th>备注</th></tr></thead>
+      <tbody>${goalRows}</tbody>
+    </table>
+    <table>
+      <thead><tr><th>每日标准</th><th>标准值</th><th>纵轴范围</th><th>超出颜色</th></tr></thead>
+      <tbody>${stdRows}</tbody>
+    </table>
+    <p style="font-size:12px;color:var(--muted);margin-top:10px">横轴范围:${CFG.xAxisStart} ~ ${CFG.xAxisEnd}(所有图统一)</p>`;
+}
+
+/* ---------- 供能比图:三条线(蛋白/碳水/脂肪的每日供能占比) + 合理区间阴影带 ---------- */
+function renderMacroChart(daily) {
+  const mr = CFG.macroRatio;
+  if (!mr) return;
+  document.getElementById('macroRow').style.display = '';
+  // 只取记录完整的天(四项齐全且热量>0);没有记录的天不画柱
+  const days = Object.entries(daily).sort(([a], [b]) => a < b ? -1 : 1)
+    .filter(([, v]) => [v.dietaryKcal, v.dietaryProtein, v.dietaryCarbs, v.dietaryFat].every(x => x != null) && v.dietaryKcal > 0)
+    .map(([d, v]) => {
+      const cp = v.dietaryProtein * 4, cc = v.dietaryCarbs * 4, cf = v.dietaryFat * 9;
+      const s = cp + cc + cf;
+      return { x: d, p: cp / s * 100, c: cc / s * 100, f: cf / s * 100 };
+    });
+  const canvas = document.getElementById('chart-macro');
+  if (!canvas || !days.length) return;
+  // 堆叠柱:脂肪在最下(底座,最该盯的),碳水中间,蛋白最上;每柱总高=100%
+  const bar = (key, label, color, stack) => ({
+    type: 'bar',
+    label,
+    data: days.map(d => ({ x: d.x, y: d[key] })),
+    backgroundColor: color + 'cc',
+    barPercentage: 0.8, categoryPercentage: 0.9,
+    stack,
+  });
+  // 脂肪 30% 上限参考线:横贯全图
+  const fatMax = {
+    type: 'line',
+    label: '脂肪上限',
+    data: [{ x: CFG.xAxisStart, y: mr.fatPct.max }, { x: CFG.xAxisEnd, y: mr.fatPct.max }],
+    borderColor: RED + '99', borderDash: [6, 6], borderWidth: 1.5,
+    pointRadius: 0, tension: 0, fill: false,
+  };
+  if (charts['macro']) charts['macro'].destroy();
+  charts['macro'] = new Chart(canvas, {
+    data: { datasets: [bar('f', '脂肪', '#e08c2f', 's'), bar('c', '碳水', '#4caf50', 's'), bar('p', '蛋白质', '#4f7cff', 's'), fatMax] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: false },
+      parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+      scales: {
+        x: { type: 'time', min: CFG.xAxisStart, max: CFG.xAxisEnd, offset: false, time: { unit: 'week', displayFormats: { week: 'M/d' } } },
+        y: { min: 0, max: 100, stacked: true, afterFit: (sc) => { sc.width = 46; } },
+      },
+      plugins: {
+        legend: { display: true, position: 'top', labels: { boxWidth: 12, font: { size: 11 }, filter: (l) => l.text !== '脂肪上限' } },
+        tooltip: {
+          filter: (item) => item.datasetIndex !== 3,
+          callbacks: { label: (item) => `${item.dataset.label}: ${Math.round(item.parsed.y)}%` },
+        },
+      },
+    },
+  });
+}
+
+/* ---------- Review 页:周期复盘 ---------- */
+const REVIEW_METHOD = [
+  ['⓪ 数据质量门槛', '先看记录完整度:饮食/体重记录缺天 ≥1/3,本期判定降级为「数据不足」,达标率仅供参考,且「恢复记录零缺天」自动成为最高优先级——数据不可信时,先修数据再谈行为。'],
+  ['① 结果 vs 目标', '体重/脂肪量:近14天实际变化 vs 目标曲线同期应到达值。三档判定:落后 <0.5kg = 正常波动;0.5~1kg = 观察带(不动作,下期复核);>1kg = 必须找到行为原因。'],
+  ['② 行为达标率', '六项每日标准(热量/蛋白/碳水/脂肪/活动/睡眠)的14天达标率,与上期对比看方向(改善/恶化比绝对值重要)。<70% 的项按「达标率低 + 健康影响大」排序,取第一为唯一重点——不并列多个重点。'],
+  ['③ 趋势拐点', '周粒度看速率:连续两周同向变化(连续降/连续停)才是趋势,单周波动不算。出现「连续两周不降」才触发目标校准讨论。'],
+  ['④ 目标校准', '只有两种情况动目标:速率持续高于曲线(提前达成)或连续两期落后 >1kg(曲线失真)。观察带内不动——频繁改目标 = 没有目标。'],
+  ['⑤ 下期重点(≤2条)', '输出一到两条,格式「接下来两周重点做 X」+ 可检验的标准(如:23:30 前放下手机)。下期 Review 第一件事就是逐条检查做没做到;连续两期未兑现的重点自动升级为下一期唯一重点。'],
+];
+function renderReview(rows, daily, goals) {
+  // 方法论
+  document.getElementById('reviewMethod').innerHTML = `<table>
+    <thead><tr><th style="width:130px">环节</th><th>看什么 / 判据</th></tr></thead>
+    <tbody>${REVIEW_METHOD.map(([t, c]) => `<tr><td><b>${t}</b></td><td>${c}</td></tr>`).join('')}</tbody>
+  </table>`;
+
+  // 自动计算:近14天 vs 前14天(占比字段现场派生)
+  const rowsD = rows.map(derived);
+  const today = new Date();
+  const seg = (fromD, toD) => {
+    const rs = rowsD.filter(r => r.date >= fromD && r.date <= toD);
+    const first = rs[0], last = rs[rs.length - 1];
+    if (!first || !last) return null;
+    return {
+      n: rs.length,
+      weight: last.weight - first.weight,
+      bodyFat: last.bodyFat - first.bodyFat,
+      muscle: last.muscle - first.muscle,
+      fatMass: last.fatMass - first.fatMass,
+      muscleMass: last.muscleMass - first.muscleMass,
+    };
+  };
+  const d = (offset) => { const t = new Date(today); t.setDate(t.getDate() - offset); return t.toISOString().slice(0, 10); };
+  const cur = seg(d(13), d(0)), prev = seg(d(27), d(14));
+  // 行为达标率(近14天)
+  const stds = CFG.standards || {};
+  const behavior = Object.entries(stds).map(([key, s]) => {
+    const vals = Object.entries(daily).filter(([dt]) => dt >= d(13)).map(([, v]) => v[key]).filter(v => v != null);
+    if (!vals.length) return { key, n: 0, hit: 0, avg: null, rate: null, dir: s.overColor };
+    const goodUp = s.overColor === 'green';
+    const hit = vals.filter(v => goodUp ? v >= s.value : v <= s.value).length;
+    return { key, n: vals.length, hit, avg: vals.reduce((a, b) => a + b, 0) / vals.length, rate: hit / vals.length, dir: s.overColor };
+  });
+
+  const delta = (v, unit, goodDown) => {
+    if (v == null) return '<td>—</td>';
+    const cls = Math.abs(v) < 0.001 ? '' : ((goodDown ? v < 0 : v > 0) ? 'good' : 'bad');
+    return `<td class="num">${v > 0 ? '+' : ''}${fmt(v)}${unit}</td><td class="delta ${cls}">${Math.abs(v) < 0.001 ? '持平' : (v < 0 ? '↓' : '↑')}</td>`;
+  };
+  let html = `<table><thead><tr><th>指标</th><th>本期(14天)</th><th></th><th>上期</th><th></th></tr></thead><tbody>`;
+  if (cur && prev) {
+    html += `<tr><td>体重</td>${delta(cur.weight, 'kg', true)}${delta(prev.weight, 'kg', true)}</tr>`;
+    html += `<tr><td>脂肪量</td>${delta(cur.fatMass, 'kg', true)}${delta(prev.fatMass, 'kg', true)}</tr>`;
+    html += `<tr><td>肌肉量</td>${delta(cur.muscleMass, 'kg', false)}${delta(prev.muscleMass, 'kg', false)}</tr>`;
+    html += `<tr><td>体脂率</td>${delta(cur.bodyFat, '', true)}${delta(prev.bodyFat, '', true)}</tr>`;
+    html += `<tr><td>肌肉率</td>${delta(cur.muscle, '', false)}${delta(prev.muscle, '', false)}</tr>`;
+  } else {
+    html += `<tr><td colspan="5" class="empty">数据不足 14 天</td></tr>`;
+  }
+  html += `</tbody></table>`;
+  html += `<table style="margin-top:14px"><thead><tr><th>行为(近14天)</th><th>均值</th><th>达标</th><th>达标率</th><th>状态</th></tr></thead><tbody>`;
+  for (const b of behavior) {
+    const m = METRICS[b.key];
+    const status = b.rate == null ? '—' : b.rate >= 0.7 ? '<span class="delta good">✓ 达标</span>' : `<span class="delta bad">⚠ 重点关注</span>`;
+    html += `<tr><td>${m.label}</td><td class="num">${b.avg == null ? '—' : fmt(b.avg)}</td>
+      <td class="num">${b.n ? `${b.hit}/${b.n}` : '—'}</td><td class="num">${b.rate == null ? '—' : Math.round(b.rate * 100) + '%'}</td><td>${status}</td></tr>`;
+  }
+  html += `</tbody></table>`;
+  document.getElementById('reviewAuto').innerHTML = html;
+
+  // 历史结论:左侧期次列表 + 右侧详情
+  loadJSON('data/reviews.json').then(reviews => {
+    const listEl = document.getElementById('reviewList');
+    if (!reviews.length) {
+      listEl.innerHTML = '<div class="empty">还没有 Review 记录</div>';
+      document.getElementById('reviewDetailBody').innerHTML = '<div class="empty">第一次 Review 后这里会显示结论</div>';
+      return;
+    }
+    const sorted = reviews.slice().sort((a, b) => a.date < b.date ? 1 : -1);   // 最新在前
+    const show = (r) => {
+      listEl.querySelectorAll('.review-item').forEach(x => x.classList.toggle('active', x.dataset.date === r.date));
+      document.getElementById('reviewDetailTitle').textContent = `📝 ${r.title}`;
+      document.getElementById('reviewDetailMeta').textContent = `${r.date} · ${r.period}`;
+      const VC = { good: [GREEN, '✓'], warning: ['#e08c2f', '⚠'], bad: [RED, '✗'] };
+      const [vc, vi] = VC[r.verdict] || VC.warning;
+      document.getElementById('reviewDetailBody').innerHTML = `
+        ${r.summary ? `<div style="border-left:3px solid ${vc};background:${vc}14;padding:10px 14px;margin-bottom:14px;border-radius:0 6px 6px 0">
+          <div style="font-size:14px;font-weight:700;color:${vc};margin-bottom:4px">${vi} 本期判定</div>
+          <div style="font-size:13px;line-height:1.7">${r.summary}</div>
+        </div>` : ''}
+        <div class="note" style="border:none;padding-top:4px">
+          <div class="c">${r.conclusion}</div>
+          <div class="d" style="margin-top:8px">📌 下期重点:${r.focus != null ? r.focus : '—'}</div>
+        </div>`;
+    };
+    listEl.innerHTML = sorted.map(r => `
+      <div class="review-item" data-date="${r.date}">
+        <div class="t">${r.title}</div>
+        <div class="d">${r.date}</div>
+      </div>`).join('');
+    listEl.querySelectorAll('.review-item').forEach(item => item.onclick = () => {
+      show(sorted.find(r => r.date === item.dataset.date));
+    });
+    show(sorted[0]);   // 默认展示最新一期
+  }).catch(() => {
+    document.getElementById('reviewList').innerHTML = '<div class="empty">还没有 Review 记录</div>';
+  });
+}
+
+(async () => {
+  // 分步容错:单步失败只跳过该步(页头提示),不影响其余区块渲染
+  const step = (name, fn) => { try { fn(); } catch (e) { console.error('[' + name + '] 渲染失败:', e); } };
+  try {
+    const rows = await loadJSON('data/body.json');
+    const [goals, knowledge, training] = await Promise.all([
+      loadJSON('data/goals.json').catch(() => []),
+      loadJSON('data/knowledge.json').catch(() => []),
+      loadJSON('data/training.json').catch(() => null),
+    ]);
+    // 基础配置(轴范围/标准线)——单一数据源
+    try { CFG = { ...CFG, ...(await loadJSON('data/config.json')) }; } catch (e) {}
+    applyConfig();
+
+    const todayStr0 = new Date();
+    const tStr = todayStr0.getFullYear() + '-' + String(todayStr0.getMonth() + 1).padStart(2, '0') + '-' + String(todayStr0.getDate()).padStart(2, '0');
+    const todayLog = trainLog.find(r => r.date === tStr);
+    step('stats', () => renderStats(rows, todayLog ? todayLog.items : null));
+    step('goals', () => buildChartRows(goals));
+    // 图表类:库缺失(老内核/加载失败)时跳过,不阻塞表格与文字
+    const hasChart = typeof Chart !== 'undefined';
+    let daily = {};   // 活动维度数据(表格页也依赖,与图表是否可用无关)
+    try { daily = await loadJSON('data/daily_summary.json'); } catch (e) {}
+    let trainLog = [];   // 训练打卡(表格页"训练"列 + 训练页记录卡共用)
+    try { trainLog = await loadJSON('data/training_log.json'); } catch (e) {}
+    if (hasChart) {
+      step('trend', () => ['fatMass', 'muscleMass', 'weight'].forEach(m => renderMetricChart(m, rows, goals)));
+
+      // 活动维度: daily_summary.json -> 柱状图,横轴与体重图对齐
+      for (const key of ['activeEnergy', 'dietaryKcal', 'dietaryProtein', 'dietaryCarbs', 'dietaryFat', 'sleepHours']) {
+        const m = METRICS[key];
+        if (!m || !m.chart) continue;
+        const series = Object.entries(daily).sort(([a], [b]) => a < b ? -1 : 1)
+          .map(([date, v]) => ({ x: date, y: v[key] != null ? v[key] : null }));
+        const s = series;   // 闭包捕获
+        step('bar-' + key, () => renderPlainBarChart(m, s));   // 统一走标准线渲染(无 standard 时纯柱)
+      }
+      step('macro', () => renderMacroChart(daily));
+      step('review', () => renderReview(rows, daily, goals));
+    } else {
+      document.getElementById('updated').textContent = '图表库未加载(网络受限),表格数据不受影响';
+    }
+
+    step('table', () => renderTable(rows, daily, trainLog));
+    step('notes', () => renderNotes(knowledge));
+    step('settings', () => renderSettings(goals));
+    step('training', () => renderTraining(training));
+    step('checkin', () => renderCheckin(trainLog));
+    const last = rows.length ? rows[rows.length - 1].date : '';
+    document.getElementById('updated').textContent = last ? `最近记录 ${last}` : '';
+    document.getElementById('updated2').textContent = last;
+  } catch (e) {
+    document.getElementById('updated').textContent = '数据加载失败: ' + e.message;
+  }
+})();

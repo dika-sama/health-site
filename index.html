@@ -1002,17 +1002,18 @@ function renderReview(rows, daily, goals) {
     try { CFG = { ...CFG, ...(await loadJSON('data/config.json')) }; } catch (e) {}
     applyConfig();
 
+    const hasChart = typeof Chart !== 'undefined';
+    let daily = {};   // 活动维度数据(表格页也依赖,与图表是否可用无关)
+    try { daily = await loadJSON('data/daily_summary.json'); } catch (e) {}
+    let trainLog = [];   // 训练打卡(汇总页状态行/表格页训练列/训练页记录卡共用)
+    try { trainLog = await loadJSON('data/training_log.json'); } catch (e) {}
+
     const todayStr0 = new Date();
     const tStr = todayStr0.getFullYear() + '-' + String(todayStr0.getMonth() + 1).padStart(2, '0') + '-' + String(todayStr0.getDate()).padStart(2, '0');
     const todayLog = trainLog.find(r => r.date === tStr);
     step('stats', () => renderStats(rows, todayLog ? todayLog.items : null));
     step('goals', () => buildChartRows(goals));
     // 图表类:库缺失(老内核/加载失败)时跳过,不阻塞表格与文字
-    const hasChart = typeof Chart !== 'undefined';
-    let daily = {};   // 活动维度数据(表格页也依赖,与图表是否可用无关)
-    try { daily = await loadJSON('data/daily_summary.json'); } catch (e) {}
-    let trainLog = [];   // 训练打卡(表格页"训练"列 + 训练页记录卡共用)
-    try { trainLog = await loadJSON('data/training_log.json'); } catch (e) {}
     if (hasChart) {
       step('trend', () => ['fatMass', 'muscleMass', 'weight'].forEach(m => renderMetricChart(m, rows, goals)));
 
