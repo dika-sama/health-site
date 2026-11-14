@@ -929,12 +929,12 @@ function renderReview(rows, daily, goals) {
     step('goals', () => buildChartRows(goals));
     // 图表类:库缺失(老内核/加载失败)时跳过,不阻塞表格与文字
     const hasChart = typeof Chart !== 'undefined';
+    let daily = {};   // 活动维度数据(表格页也依赖,与图表是否可用无关)
+    try { daily = await loadJSON('data/daily_summary.json'); } catch (e) {}
     if (hasChart) {
       step('trend', () => ['fatMass', 'muscleMass', 'weight'].forEach(m => renderMetricChart(m, rows, goals)));
 
       // 活动维度: daily_summary.json -> 柱状图,横轴与体重图对齐
-      let daily = {};
-      try { daily = await loadJSON('data/daily_summary.json'); } catch (e) {}
       for (const key of ['activeEnergy', 'dietaryKcal', 'dietaryProtein', 'dietaryCarbs', 'dietaryFat', 'sleepHours']) {
         const m = METRICS[key];
         if (!m || !m.chart) continue;
@@ -949,7 +949,7 @@ function renderReview(rows, daily, goals) {
       document.getElementById('updated').textContent = '图表库未加载(网络受限),表格数据不受影响';
     }
 
-    step('table', () => renderTable(rows, {}));
+    step('table', () => renderTable(rows, daily));
     step('notes', () => renderNotes(knowledge));
     step('settings', () => renderSettings(goals));
     step('training', () => renderTraining(training));
