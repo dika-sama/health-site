@@ -625,14 +625,35 @@ function renderTraining(training) {
   training.sessions.forEach(s => s.exercises.forEach(e => {
     totalSets[e.muscle] = (totalSets[e.muscle] || 0) + e.sets;
   }));
+  // 器械模式:自重 / 哑铃(有哑铃时动作升级为哑铃版,同一结构)
+  let equip = '自重';
   const show = (s) => {
     listEl.querySelectorAll('.review-item').forEach(x => x.classList.toggle('active', x.dataset.id === s.id));
     document.getElementById('sessionTitle').textContent = `${s.id} · ${s.title}`;
-    document.getElementById('sessionMeta').textContent = `${s.day} · 全部居家可完成 · 总计 ${s.exercises.reduce((a, e) => a + e.sets, 0)} 组`;
+    document.getElementById('sessionMeta').textContent = `${s.day} · ${equip}模式 · 总计 ${s.exercises.reduce((a, e) => a + e.sets, 0)} 组`;
+    const useDb = equip === '哑铃';
+    document.querySelector('#sessionTable thead').innerHTML = useDb
+      ? '<tr><th>动作(哑铃版)</th><th>肌群</th><th>组数</th><th>次数</th><th>要点</th></tr>'
+      : '<tr><th>动作</th><th>肌群</th><th>组数</th><th>次数</th><th>要点</th></tr>';
     document.querySelector('#sessionTable tbody').innerHTML = s.exercises.map(e => `<tr>
-      <td>${e.name}</td><td>${e.muscle}</td><td class="num">${e.sets}</td><td>${e.reps}</td><td style="font-size:12px;color:var(--muted)">${e.note || ''}</td>
+      <td>${useDb && e.db ? e.name.split('(')[0] + ' → ' + e.db.split(':')[0] : e.name}</td>
+      <td>${e.muscle}</td><td class="num">${e.sets}</td><td>${e.reps}</td>
+      <td style="font-size:12px;color:var(--muted)">${useDb && e.db ? e.db.split(':').slice(1).join(':') || e.db : (e.note || '')}</td>
     </tr>`).join('');
   };
+  // 模式切换按钮(有哑铃数据时才显示)
+  if (sorted.some(s => s.exercises.some(e => e.db))) {
+    const hintEl = document.getElementById('trainingTargetHint');
+    const renderSwitch = () => {
+      hintEl.innerHTML = `每周 ${t.sessionsPerWeek} 次 · 每肌群周 ${t.setsPerMusclePerWeek.min}-${t.setsPerMusclePerWeek.max} 组(维持剂量) &nbsp;
+        <button id="equipBtn" style="border:1px solid var(--border);background:${equip === '哑铃' ? 'var(--accent-soft)' : 'var(--card)'};color:${equip === '哑铃' ? 'var(--accent)' : 'var(--muted)'};border-radius:999px;padding:3px 12px;font-size:12px;cursor:pointer"> dumbbell模式:切换为${equip === '哑铃' ? '自重' : '哑铃'}版 </button>`;
+      document.getElementById('equipBtn').onclick = () => { equip = equip === '哑铃' ? '自重' : '哑铃'; renderSwitch(); show(sorted.find(x => x.id === (document.querySelector('.review-item.active') || {}).dataset ? sorted.find(x => x.id === document.querySelector('.review-item.active').dataset.id) : sorted[0])); };
+    };
+    renderSwitch();
+  } else {
+    document.getElementById('trainingTargetHint').textContent =
+      `每周 ${t.sessionsPerWeek} 次 · 每肌群周 ${t.setsPerMusclePerWeek.min}-${t.setsPerMusclePerWeek.max} 组(维持剂量)`;
+  }
   listEl.innerHTML = sorted.map(s => `
     <div class="review-item" data-id="${s.id}">
       <div class="t">${s.id} · ${s.title}</div>
