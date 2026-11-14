@@ -250,6 +250,16 @@
           </table></div>
         </div>
         <div class="card">
+          <h2>✅ 今日打卡</h2>
+          <div class="hint">点「+」记录每组完成;数据存本机,历史由 AI 同步到打卡记录</div>
+          <div id="checkinBox"></div>
+        </div>
+        <div class="card">
+          <h2>📅 打卡记录</h2>
+          <div class="hint">近 21 天;✓ = 完成当日计划组数</div>
+          <div id="trainLogBox"></div>
+        </div>
+        <div class="card">
           <h2>📏 周组数核对(每肌群 4-6 组)</h2>
           <div class="hint">肌肉维持的最低有效剂量;低于 4 = 没练够,高于 6 = 恢复不过来(减脂期)</div>
           <div id="weeklySets"></div>
@@ -613,6 +623,68 @@ function renderNotes(items) {
   show(sorted[0]);
 }
 
+/* ---------- 今日打卡:localStorage 记当天组数 + 训练打卡历史 ---------- */
+const CHECKIN_KEY = 'health-checkin';   // { '2026-11-14': {exerciseName: sets, ...}, ... }
+function loadCheckin() {
+  try { return JSON.parse(localStorage.getItem(CHECKIN_KEY) || '{}'); } catch (e) { return {}; }
+}
+function saveCheckin(data) { localStorage.setItem(CHECKIN_KEY, JSON.stringify(data)); }
+function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+
+function renderCheckin(training) {
+  const box = document.getElementById('checkinBox');
+  const logBox = document.getElementById('trainLogBox');
+  if (!box) return;
+  const today = todayStr();
+  const data = loadCheckin();
+  const plan = training.sessions.find(s => s.day.indexOf('周五') >= 0);   // 兜底展示,不强制绑定周几
+  const allEx = [];
+  training.sessions.forEach(s => s.exercises.forEach(e => allEx.push(e)));
+
+  const renderBox = () => {
+    const cur = data[today] || {};
+    const rows = allEx.map(e => {
+      const done = cur[e.name] || 0;
+      const planned = e.sets;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1;font-size:13px">${e.name} <span style="color:var(--muted);font-size:11px">· ${e.muscle}</span></div>
+        <button data-ex="${e.name}" data-delta="-1" style="width:28px;height:28px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;font-size:15px;color:var(--muted)">−</button>
+        <div style="min-width:56px;text-align:center;font-size:13px"><b>${done}</b>/${planned} 组</div>
+        <button data-ex="${e.name}" data-delta="1" style="width:28px;height:28px;border:1px solid ${done >= planned ? GREEN : 'var(--border)'};border-radius:8px;background:${done >= planned ? GREEN + '22' : 'var(--card)'};cursor:pointer;font-size:15px;color:${done >= planned ? GREEN : 'var(--text)'}">+</button>
+      </div>`;
+    }).join('');
+    const totalDone = allEx.reduce((a, e) => a + (cur[e.name] || 0), 0);
+    const totalPlan = allEx.reduce((a, e) => a + e.sets, 0);
+    box.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px">今天(${today.slice(5)})累计 ${totalDone} 组 / 全部动作计划 ${totalPlan} 组(计划是三天总量,当天做到哪算哪)</div>${rows}`;
+    box.querySelectorAll('button').forEach(btn => btn.onclick = () => {
+      const d = loadCheckin();
+      const c = d[today] || {};
+      const name = btn.dataset.ex, delta = Number(btn.dataset.delta);
+      c[name] = Math.max(0, (c[name] || 0) + delta);
+      if (c[name] === 0) delete c[name];
+      d[today] = c;
+      saveCheckin(d);
+      renderBox(); renderLog();
+    });
+  };
+
+  const renderLog = () => {
+    const d = loadCheckin();
+    const dates = Object.keys(d).sort().reverse().slice(0, 21);
+    if (!dates.length) { logBox.innerHTML = '<div class="empty">还没有打卡,做完点上面的 + </div>'; return; }
+    logBox.innerHTML = dates.map(dt => {
+      const c = d[dt];
+      const parts = Object.entries(c).map(([n, s]) => `${n}×${s}组`);
+      return `<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px">
+        <div style="min-width:52px;color:var(--muted)">${dt.slice(5)}</div>
+        <div style="flex:1">${parts.join(' · ') || '—'}</div>
+      </div>`;
+    }).join('');
+  };
+
+  renderBox(); renderLog();
+}
+
 /* ---------- 训练页:左侧训练日 + 右侧动作明细 + 周组数核对 ---------- */
 function renderTraining(training) {
   if (!training && training.sessions && training.sessions.length) return;
@@ -679,9 +751,11 @@ function renderTraining(training) {
   document.getElementById('trainingRules').innerHTML = `<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9">
     <li><b>强度判断:</b>每组做到「还能再做 2 次」就停下;能轻松做满上限次数,下次就加难度(垫高脚/负重/换更难变式)</li>
     <li><b>安排间隔:</b>同一肌群两次训练间隔 ≥48 小时(周一推/周三腿/周五拉正好错开);缺了就跳过,不顺延堆积</li>
+    <li><b>酸痛判读:</b>新动作后 24-48h 的酸痛(DOMS)= 正常,不作为加练理由;关节刺痛 = 停,肌肉酸痛 = 可轻量继续</li>
     <li><b>进退标准:</b>动作能标准做满上限 → 升级难度;做不到下限 → 降级难度,动作质量优先于次数</li>
   </ul>`;
   // 三餐表 + 饮食规则
+  renderCheckin(training);
   if (training.meals && training.meals.length) {
     document.querySelector('#mealTable tbody').innerHTML = training.meals.map(m => `<tr>
       <td><b>${m.slot}</b></td><td class="num">${m.protein}</td><td class="num">${m.kcal}</td>
