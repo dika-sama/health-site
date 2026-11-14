@@ -152,6 +152,7 @@
     <div class="card">
       <h2 id="goalTitle">🎯 目标</h2>
       <div class="stats" id="stats"></div>
+      <div id="todayTrain" style="font-size:13px;padding:4px 2px 0"></div>
     </div>
     <div class="chart-rows" id="chartRows"><!-- 各图 hint 由 JS 按 goals/config 动态写入 --></div>
     <div class="chart-row" id="macroRow" style="display:none">
@@ -160,15 +161,15 @@
     </div>
   </div>
 
-  <!-- ============ 身体数据页 ============ -->
+  <!-- ============ 数据页:每日全量汇总(身体/活动/饮食/训练) ============ -->
   <div class="page" id="page-body">
     <div class="card">
-      <h2>🧍 数据详情</h2>
-      <div class="hint">体重/体脂/肌肉率/脂肪量为手记；活动与饮食来自 Apple 健康 / 饮食记录；空白 = 当日无记录</div>
+      <h2>📊 每日数据</h2>
+      <div class="hint">按天汇总:身体(手记)+ 活动(Apple 健康)+ 饮食(饮食记录)+ 训练(打卡);「训练」列 ●=推 🟠=腿 🔵=拉,空白=当天没练</div>
       <div class="scroll">
         <table id="bodyTable">
           <thead><tr>
-            <th>日期</th><th>体重 (kg)</th><th>脂肪量 (kg)</th><th>肌肉量 (kg)</th><th>体脂率 (%)</th><th>肌肉率 (%)</th>
+            <th>日期</th><th>训练</th><th>体重 (kg)</th><th>脂肪量 (kg)</th><th>肌肉量 (kg)</th><th>体脂率 (%)</th><th>肌肉率 (%)</th>
             <th>活动 (kcal)</th><th>热量 (kcal)</th><th>蛋白质 (g)</th><th>碳水 (g)</th><th>脂肪 (g)</th><th>睡眠 (h)</th><th>备注</th>
           </tr></thead>
           <tbody></tbody>
@@ -319,13 +320,16 @@ async function loadJSON(p) {
 function fmt(n) { return (n == null || n === '') ? '' : Number(n).toFixed(2).replace(/\.00$/, '').replace(/(\.\d)0$/, '$1'); }
 
 /* ---------- 汇总页:指标卡 ---------- */
+// 训练三块的判定顺序与颜色(数据页训练列/汇总页共用)
+const order3 = ['推', '腿', '拉'];
+const TRAIN_COLORS = { 推: RED, 腿: '#e08c2f', 拉: '#4f7cff' };
 // 占比指标现场计算:体脂率 = fatMass/weight, 肌肉率 = muscleMass/weight
 const derived = (r) => ({
   ...r,
   bodyFat: r.fatMass / r.weight * 100,
   muscle: r.muscleMass / r.weight * 100,
 });
-function renderStats(rowsRaw) {
+function renderStats(rowsRaw, trainLogToday) {
   const el = document.getElementById('stats');
   if (!rowsRaw.length) { el.innerHTML = ''; return; }
   const rows = rowsRaw.map(derived);
@@ -343,6 +347,15 @@ function renderStats(rowsRaw) {
     return `<div class="stat"><div class="label">${label}</div>
       <div class="value">${value}<small>${unit}</small> <span class="delta">${word} ${fmt(abs)}${unit}</span></div></div>`;
   }).join('');
+  // 当天训练状态行:练了哪几块,三色块标识(与数据页「训练」列同源)
+  const trainEl = document.getElementById('todayTrain');
+  if (trainEl) {
+    const tag = trainLogToday ? trainTag(trainLogToday) : '';
+    const hitBlocks = order3.filter(g => tag.indexOf(TRAIN_COLORS[g]) >= 0);
+    trainEl.innerHTML = hitBlocks.length
+      ? `🏋️ 今日已练:<b>${hitBlocks.join(' + ')}</b> <span style="display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle">${hitBlocks.map(g => `<span style="width:12px;height:12px;border-radius:3px;background:${TRAIN_COLORS[g]};display:inline-block"></span>`).join('')}</span>`
+      : `🏋️ 今日还未记录训练`;
+  }
 }
 
 /* ---------- 目标趋势线 ---------- */
@@ -533,11 +546,29 @@ function renderPlainBarChart(m, series) {
 
 /* ---------- 目标 chips(已并入指标卡,保留函数备查) ---------- */
 
-/* ---------- 表格页:手记数据 + 活动/饮食合并展示 ---------- */
-function renderTable(rowsRaw, daily) {
+/* ---------- 表格页:每日全量汇总(身体+活动+饮食+训练) ---------- */
+// 训练块 → 颜色:推=红 腿=橙 拉=蓝;由动作名关键词判定
+const TRAIN_KEYS = {
+  推: ['俯卧撑', '卧推', '推举', '臂屈伸', '飞鸟'],
+  腿: ['蹲', '箭步', '臀桥', '硬拉', '提踵'],
+  拉: ['划船', '弯举', '超人', '反向飞鸟', '支撑划船'],
+};
+function trainTag(items) {
+  if (!items || !items.length) return '';
+  const hit = {};
+  items.forEach(i => {
+    for (const g in TRAIN_KEYS) if (TRAIN_KEYS[g].some(k => i.name.indexOf(k) >= 0)) hit[g] = true;
+  });
+  return order3.filter(g => hit[g]).map(g =>
+    `<span title="${g}" style="display:inline-block;width:14px;height:14px;border-radius:4px;background:${TRAIN_COLORS[g]};margin-right:4px;vertical-align:middle"></span>`
+  ).join('');
+}
+function renderTable(rowsRaw, daily, trainLog) {
   const tb = document.querySelector('#bodyTable tbody');
   const rows = rowsRaw.map(derived);
-  const allDates = [...new Set([...rows.map(r => r.date), ...Object.keys(daily)])].sort().reverse();
+  const trainByDate = {};
+  (trainLog || []).forEach(r => { trainByDate[r.date] = r.items; });
+  const allDates = [...new Set([...rows.map(r => r.date), ...Object.keys(daily), ...Object.keys(trainByDate)])].sort().reverse();
   const rowOf = (d) => rows.find(r => r.date === d);
   const day = (d) => daily[d] || {};
   tb.innerHTML = allDates.map(d => {
@@ -545,6 +576,7 @@ function renderTable(rowsRaw, daily) {
     const s = day(d);
     return `<tr>
       <td>${d}</td>
+      <td>${trainTag(trainByDate[d])}</td>
       <td class="num">${fmt(r.weight)}</td><td class="num">${fmt(r.fatMass)}</td><td class="num">${fmt(r.muscleMass)}</td>
       <td class="num">${r.fatMass ? fmt(r.bodyFat, 1) : ''}</td><td class="num">${r.muscleMass ? fmt(r.muscle, 1) : ''}</td>
       <td class="num">${fmt(s.activeEnergy)}</td><td class="num">${fmt(s.dietaryKcal)}</td>
@@ -970,12 +1002,17 @@ function renderReview(rows, daily, goals) {
     try { CFG = { ...CFG, ...(await loadJSON('data/config.json')) }; } catch (e) {}
     applyConfig();
 
-    step('stats', () => renderStats(rows));
+    const todayStr0 = new Date();
+    const tStr = todayStr0.getFullYear() + '-' + String(todayStr0.getMonth() + 1).padStart(2, '0') + '-' + String(todayStr0.getDate()).padStart(2, '0');
+    const todayLog = trainLog.find(r => r.date === tStr);
+    step('stats', () => renderStats(rows, todayLog ? todayLog.items : null));
     step('goals', () => buildChartRows(goals));
     // 图表类:库缺失(老内核/加载失败)时跳过,不阻塞表格与文字
     const hasChart = typeof Chart !== 'undefined';
     let daily = {};   // 活动维度数据(表格页也依赖,与图表是否可用无关)
     try { daily = await loadJSON('data/daily_summary.json'); } catch (e) {}
+    let trainLog = [];   // 训练打卡(表格页"训练"列 + 训练页记录卡共用)
+    try { trainLog = await loadJSON('data/training_log.json'); } catch (e) {}
     if (hasChart) {
       step('trend', () => ['fatMass', 'muscleMass', 'weight'].forEach(m => renderMetricChart(m, rows, goals)));
 
@@ -994,11 +1031,11 @@ function renderReview(rows, daily, goals) {
       document.getElementById('updated').textContent = '图表库未加载(网络受限),表格数据不受影响';
     }
 
-    step('table', () => renderTable(rows, daily));
+    step('table', () => renderTable(rows, daily, trainLog));
     step('notes', () => renderNotes(knowledge));
     step('settings', () => renderSettings(goals));
     step('training', () => renderTraining(training));
-    loadJSON('data/training_log.json').then(log => step('checkin', () => renderCheckin(log))).catch(() => step('checkin', () => renderCheckin([])));
+    step('checkin', () => renderCheckin(trainLog));
     const last = rows.length ? rows[rows.length - 1].date : '';
     document.getElementById('updated').textContent = last ? `最近记录 ${last}` : '';
     document.getElementById('updated2').textContent = last;
