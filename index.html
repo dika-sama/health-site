@@ -250,13 +250,8 @@
           </table></div>
         </div>
         <div class="card">
-          <h2>✅ 今日打卡</h2>
-          <div class="hint">点「+」记录每组完成;数据存本机,历史由 AI 同步到打卡记录</div>
-          <div id="checkinBox"></div>
-        </div>
-        <div class="card">
-          <h2>📅 打卡记录</h2>
-          <div class="hint">近 21 天;✓ = 完成当日计划组数</div>
+          <h2>📅 训练打卡</h2>
+          <div class="hint">练了什么告诉 AI 记录即可,刷新本页即见;最新在最上</div>
           <div id="trainLogBox"></div>
         </div>
         <div class="card">
@@ -623,66 +618,22 @@ function renderNotes(items) {
   show(sorted[0]);
 }
 
-/* ---------- 今日打卡:localStorage 记当天组数 + 训练打卡历史 ---------- */
-const CHECKIN_KEY = 'health-checkin';   // { '2026-11-14': {exerciseName: sets, ...}, ... }
-function loadCheckin() {
-  try { return JSON.parse(localStorage.getItem(CHECKIN_KEY) || '{}'); } catch (e) { return {}; }
-}
-function saveCheckin(data) { localStorage.setItem(CHECKIN_KEY, JSON.stringify(data)); }
-function todayStr() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
-
-function renderCheckin(training) {
-  const box = document.getElementById('checkinBox');
+/* ---------- 训练打卡:读 training_log.json(AI 维护),最新在上 ---------- */
+function renderCheckin(log) {
   const logBox = document.getElementById('trainLogBox');
-  if (!box) return;
-  const today = todayStr();
-  const data = loadCheckin();
-  const plan = training.sessions.find(s => s.day.indexOf('周五') >= 0);   // 兜底展示,不强制绑定周几
-  const allEx = [];
-  training.sessions.forEach(s => s.exercises.forEach(e => allEx.push(e)));
-
-  const renderBox = () => {
-    const cur = data[today] || {};
-    const rows = allEx.map(e => {
-      const done = cur[e.name] || 0;
-      const planned = e.sets;
-      return `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
-        <div style="flex:1;font-size:13px">${e.name} <span style="color:var(--muted);font-size:11px">· ${e.muscle}</span></div>
-        <button data-ex="${e.name}" data-delta="-1" style="width:28px;height:28px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer;font-size:15px;color:var(--muted)">−</button>
-        <div style="min-width:56px;text-align:center;font-size:13px"><b>${done}</b>/${planned} 组</div>
-        <button data-ex="${e.name}" data-delta="1" style="width:28px;height:28px;border:1px solid ${done >= planned ? GREEN : 'var(--border)'};border-radius:8px;background:${done >= planned ? GREEN + '22' : 'var(--card)'};cursor:pointer;font-size:15px;color:${done >= planned ? GREEN : 'var(--text)'}">+</button>
-      </div>`;
-    }).join('');
-    const totalDone = allEx.reduce((a, e) => a + (cur[e.name] || 0), 0);
-    const totalPlan = allEx.reduce((a, e) => a + e.sets, 0);
-    box.innerHTML = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px">今天(${today.slice(5)})累计 ${totalDone} 组 / 全部动作计划 ${totalPlan} 组(计划是三天总量,当天做到哪算哪)</div>${rows}`;
-    box.querySelectorAll('button').forEach(btn => btn.onclick = () => {
-      const d = loadCheckin();
-      const c = d[today] || {};
-      const name = btn.dataset.ex, delta = Number(btn.dataset.delta);
-      c[name] = Math.max(0, (c[name] || 0) + delta);
-      if (c[name] === 0) delete c[name];
-      d[today] = c;
-      saveCheckin(d);
-      renderBox(); renderLog();
-    });
-  };
-
-  const renderLog = () => {
-    const d = loadCheckin();
-    const dates = Object.keys(d).sort().reverse().slice(0, 21);
-    if (!dates.length) { logBox.innerHTML = '<div class="empty">还没有打卡,做完点上面的 + </div>'; return; }
-    logBox.innerHTML = dates.map(dt => {
-      const c = d[dt];
-      const parts = Object.entries(c).map(([n, s]) => `${n}×${s}组`);
-      return `<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px">
-        <div style="min-width:52px;color:var(--muted)">${dt.slice(5)}</div>
-        <div style="flex:1">${parts.join(' · ') || '—'}</div>
-      </div>`;
-    }).join('');
-  };
-
-  renderBox(); renderLog();
+  if (!logBox) return;
+  if (!log || !log.length) { logBox.innerHTML = '<div class="empty">还没有打卡记录</div>'; return; }
+  const today = new Date();
+  const tStr = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+  const sorted = log.slice().sort((a, b) => a.date < b.date ? 1 : -1);
+  logBox.innerHTML = sorted.map(r => {
+    const parts = r.items.map(i => `${i.name}${i.sets > 1 ? '×' + i.sets + '组' : ''}`);
+    const isToday = r.date === tStr;
+    return `<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px">
+      <div style="min-width:52px;color:${isToday ? 'var(--accent)' : 'var(--muted)'};font-weight:${isToday ? '700' : '400'}">${r.date.slice(5)}${isToday ? ' 今' : ''}</div>
+      <div style="flex:1">${parts.join(' · ')}${r.note ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${r.note}</div>` : ''}</div>
+    </div>`;
+  }).join('');
 }
 
 /* ---------- 训练页:左侧训练日 + 右侧动作明细 + 周组数核对 ---------- */
@@ -755,7 +706,6 @@ function renderTraining(training) {
     <li><b>进退标准:</b>动作能标准做满上限 → 升级难度;做不到下限 → 降级难度,动作质量优先于次数</li>
   </ul>`;
   // 三餐表 + 饮食规则
-  renderCheckin(training);
   if (training.meals && training.meals.length) {
     document.querySelector('#mealTable tbody').innerHTML = training.meals.map(m => `<tr>
       <td><b>${m.slot}</b></td><td class="num">${m.protein}</td><td class="num">${m.kcal}</td>
@@ -1048,6 +998,7 @@ function renderReview(rows, daily, goals) {
     step('notes', () => renderNotes(knowledge));
     step('settings', () => renderSettings(goals));
     step('training', () => renderTraining(training));
+    loadJSON('data/training_log.json').then(log => step('checkin', () => renderCheckin(log))).catch(() => step('checkin', () => renderCheckin([])));
     const last = rows.length ? rows[rows.length - 1].date : '';
     document.getElementById('updated').textContent = last ? `最近记录 ${last}` : '';
     document.getElementById('updated2').textContent = last;
