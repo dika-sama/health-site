@@ -380,5 +380,19 @@
   "dietaryKcal": 519,
   "dietaryProtein": 32,
   "sleepHours": 7.3
+ },
+ "2026-11-14": {
+  "dietaryKcal": 1887,
+  "dietaryProtein": 152,
+  "dietaryCarbs": 176,
+  "dietaryFat": 45,
+  "sleepHours": 5.5
+ },
+ "2026-11-15": {
+  "dietaryKcal": 1720,
+  "dietaryProtein": 222,
+  "dietaryCarbs": 136,
+  "dietaryFat": 51,
+  "sleepHours": 5.9
  }
 }
