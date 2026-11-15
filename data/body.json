@@ -108,21 +108,35 @@
   "date": "2026-11-09",
   "weight": 87.6,
   "fatMass": 24.3,
-  "muscleMass": 60.3,
+  "muscleMass": 59.9,
   "note": ""
  },
  {
   "date": "2026-11-12",
   "weight": 87.45,
   "fatMass": 24.0,
-  "muscleMass": 60.4,
+  "muscleMass": 60.0,
   "note": ""
  },
  {
   "date": "2026-11-13",
   "weight": 87.05,
   "fatMass": 23.8,
-  "muscleMass": 60.4,
+  "muscleMass": 59.9,
+  "note": ""
+ },
+ {
+  "date": "2026-11-14",
+  "weight": 86.85,
+  "fatMass": 23.7,
+  "muscleMass": 59.8,
+  "note": ""
+ },
+ {
+  "date": "2026-11-16",
+  "weight": 86.7,
+  "fatMass": 23.6,
+  "muscleMass": 59.7,
   "note": ""
  }
 ]
