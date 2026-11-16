@@ -477,7 +477,7 @@ function goalDataset(g, goals) {
           const wvE = sw.to, fvE = sf.to;
           pts.push({ x: end, y: fvE / wvE * 100 });
           lines.push({
-            label: label + ' ' + fmt(fvE / wvE * 100),
+            label: label + ' ' + fmt(fvE / wvE * 100) + '@3/31',
             data: pts,
             borderColor: color,
             borderDash: [3, 5],
@@ -487,6 +487,20 @@ function goalDataset(g, goals) {
             fill: false,
           });
         });
+        // 18% 目标线:水平参考线(18=75kg 时的 A 线参考,不是 3/31 状态)
+        if (g.to != null) {
+          const ref = [{ x: start, y: g.to }, { x: end, y: g.to }];
+          lines.push({
+            label: '目标 ' + fmt(g.to) + ' @75kg',
+            data: ref,
+            borderColor: METRICS[g.metric].color + 'aa',
+            borderDash: [8, 4],
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0,
+            fill: false,
+          });
+        }
         return lines;
       }
     }
@@ -924,8 +938,9 @@ function metricHint(key, goals) {
       const commit = g.scenarios && g.scenarios.committed;
       const commitEnd = commit && commit.phases && commit.phases[commit.phases.length - 1];
       if (isRef) {
-        const tail = commitEnd ? ` · 承诺线 ${fmt(commitEnd.fat / commitEnd.weight * 100)}（${fmtDate(commitEnd.end)}）` : '';
-        return `参考(非目标) ${fmt(g.from)} → ${fmt(g.to)}（${fmtDate(g.end)}）${tail}`;
+        // to = 75kg 时的参考值(非 3/31 状态);承诺线给出 3/31 的现实预期
+        const cVal = commitEnd ? fmt(commitEnd.fat / commitEnd.weight * 100) : '—';
+        return `参考(非目标) ${fmt(g.from)} → ${fmt(g.to)} = 75kg 时水准 · 3/31 承诺线 ${cVal}`;
       }
       if (commitEnd) {
         const keyMap = { weight: 'weight', fatMass: 'fat', muscleMass: 'muscle' };
