@@ -413,27 +413,23 @@ function goalDataset(g, goals) {
     tension: 0,
     fill: false,
   }];
-  // ref 型专属:抗阻保护线(g.protect,抗阻+足量蛋白结局);两条线之间 = 抗阻训练的价值区间
-  if (g.curve === 'ref' && g.protect) {
-    const pPts = [];
-    const pk = 0.0055;   // 与体重/脂肪曲线同节奏
-    const pdenom = 1 - Math.exp(-pk * N);
-    const pVal = (t) => {
-      const n = (t - start.getTime()) / 86400e3;
-      return g.protect.to + (g.protect.from - g.protect.to) * (Math.exp(-pk * n) - Math.exp(-pk * N)) / pdenom;
+  // ref 型专属:预期线(g.expect,抗阻现实落点) + 理想线(g.protect,抗阻+超额减脂上限)
+  // 三层口径(78kg终点配平:肌肉+脂肪+3.5其他=78):下限线(脂肪目标达标口径)< 预期线(体脂22~23%)< 理想线(体脂19%,天花板)
+  if (g.curve === 'ref') {
+    const mkLine = (p, label, color, w) => {
+      const pk = 0.0055;   // 与体重/脂肪曲线同节奏
+      const pdenom = 1 - Math.exp(-pk * N);
+      const pVal = (t) => {
+        const n = (t - start.getTime()) / 86400e3;
+        return p.to + (p.from - p.to) * (Math.exp(-pk * n) - Math.exp(-pk * N)) / pdenom;
+      };
+      const pPts = [];
+      for (let t = start.getTime(); t <= end.getTime(); t += 3 * 86400e3) pPts.push({ x: new Date(t), y: pVal(t) });
+      pPts.push({ x: end, y: pVal(end.getTime()) });
+      return { label: `${label} ${fmt(p.to)}`, data: pPts, borderColor: color, borderDash: [3, 5], borderWidth: w, pointRadius: 0, tension: 0, fill: false };
     };
-    for (let t = start.getTime(); t <= end.getTime(); t += 3 * 86400e3) pPts.push({ x: new Date(t), y: pVal(t) });
-    pPts.push({ x: end, y: pVal(end.getTime()) });
-    lines.push({
-      label: `保护线(抗阻) ${fmt(g.protect.to)}`,
-      data: pPts,
-      borderColor: GREEN + 'aa',
-      borderDash: [3, 5],
-      borderWidth: 1.5,
-      pointRadius: 0,
-      tension: 0,
-      fill: false,
-    });
+    if (g.expect) lines.push(mkLine(g.expect, '预期线(抗阻)', GREEN + 'aa', 2));
+    if (g.protect) lines.push(mkLine(g.protect, '理想线(上限)', RED + '77', 1.5));
   }
   return lines;
 }
