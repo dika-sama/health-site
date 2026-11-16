@@ -359,16 +359,35 @@ function renderStats(rowsRaw, trainLogToday) {
 }
 
 /* ---------- 目标趋势线 ---------- */
-// 目标线:linear = 匀速直线;exp = 指数衰减(前期快后期慢,符合减重生理规律)
+// 目标线:linear = 匀速直线;exp = 指数衰减(前期快后期慢);ref = 联动参考线(体重曲线-脂肪曲线-refMinus)
 // exp 模型:w(t) = to + (from - to) * (1 - e^(-k·n)) / (1 - e^(-k·N)),n=第几天,N=总天数
-// decay 参数 k 控制前快后慢的程度(k 越大前期越陡);from/to 为锚点,曲线过两端点
-function goalDataset(g) {
+// ref 模型(BIA 配平伪影剔除):肌肉量读数被体重/脂肪挤出,故目标不设绝对值,按两曲线差推参考线
+function goalDataset(g, goals) {
   const start = new Date(g.start + 'T00:00:00'), end = new Date(g.end + 'T00:00:00');
   const span = end - start;
   const N = span / 86400e3;
   const k = g.decay != null ? g.decay : 0.0075;
   const isExp = g.curve === 'exp';
+  // ref 型:取同周期 weight/fatMass 两条曲线实时求差
+  let wGoal = null, fGoal = null;
+  if (g.curve === 'ref' && goals) {
+    wGoal = goals.find(x => x.metric === 'weight');
+    fGoal = goals.find(x => x.metric === 'fatMass');
+  }
+  const curveVal = (gg, t) => {
+    const n = (t - start.getTime()) / 86400e3;
+    if (!gg) return null;
+    const kk = gg.decay != null ? gg.decay : 0.0075;
+    if (gg.curve !== 'exp') return gg.from + (gg.to - gg.from) * (n / N);
+    const denom = 1 - Math.exp(-kk * N);
+    return gg.to + (gg.from - gg.to) * (Math.exp(-kk * n) - Math.exp(-kk * N)) / denom;
+  };
   const valAt = (t) => {
+    if (g.curve === 'ref') {
+      const wv = curveVal(wGoal, t), fv = curveVal(fGoal, t);
+      if (wv == null || fv == null) return null;
+      return wv - fv - (g.refMinus != null ? g.refMinus : 3.0);
+    }
     const n = (t - start.getTime()) / 86400e3;
     if (!isExp) return g.from + (g.to - g.from) * (n / N);
     const denom = 1 - Math.exp(-k * N);
@@ -377,11 +396,15 @@ function goalDataset(g) {
   const pts = [];
   // 每 3 天一个点,铺满整个周期
   for (let t = start.getTime(); t <= end.getTime(); t += 3 * 86400e3) {
-    pts.push({ x: new Date(t), y: valAt(t) });
+    const y = valAt(t);
+    if (y != null) pts.push({ x: new Date(t), y: y });
   }
-  pts.push({ x: end, y: g.to });
+  const endY = valAt(end.getTime());
+  if (endY != null) pts.push({ x: end, y: endY });
+  const refTag = g.curve === 'ref' ? '参考' : '目标';
+  const endLabel = g.curve === 'ref' ? `参考${g.refMinus != null ? '(−' + g.refMinus + '其他)' : ''}` : `${fmt(g.to)}`;
   return {
-    label: `目标 → ${fmt(g.to)}${g.metric.includes('%') || METRICS[g.metric] ? '' : ''}`,
+    label: `${refTag}线 ${endLabel}`,
     data: pts,
     borderColor: METRICS[g.metric].color + '88',
     borderDash: [6, 6],
@@ -419,10 +442,28 @@ function renderMetricChart(metric, rowsRaw, goals) {
   const m = METRICS[metric];
   const g = (goals || []).find(x => x.metric === metric);
   const rows = rowsRaw.map(derived);   // 现场计算占比字段(bodyFat/muscle)
+  const isRef = g && g.curve === 'ref';
 
-  // 达成率 = 当前总进度:实际完成变化 ÷ 目标总变化(方向自适应,不看时间进度)
+  // 肌肉量(ref 型):参考线 = 体重曲线-脂肪曲线-refMinus,随时间联动
+  let refValToday = null;
+  if (isRef) {
+    const gg = goals;
+    const wG = gg.find(x => x.metric === 'weight'), fG = gg.find(x => x.metric === 'fatMass');
+    const refAt = (gg2, t) => {
+      const start = new Date(gg2.start + 'T00:00:00'), end = new Date(gg2.end + 'T00:00:00');
+      const N = (end - start) / 86400e3, n = (t - start.getTime()) / 86400e3;
+      const kk = gg2.decay != null ? gg2.decay : 0.0075;
+      if (gg2.curve !== 'exp') return gg2.from + (gg2.to - gg2.from) * (n / N);
+      const denom = 1 - Math.exp(-kk * N);
+      return gg2.to + (gg2.from - gg2.to) * (Math.exp(-kk * n) - Math.exp(-kk * N)) / denom;
+    };
+    const now = Date.now() < new Date(g.end + 'T00:00:00').getTime() ? Date.now() : new Date(g.end + 'T00:00:00').getTime();
+    refValToday = refAt(wG, now) - refAt(fG, now) - (g.refMinus != null ? g.refMinus : 3.0);
+  }
+
+  // 达成率 = 当前总进度:实际完成变化 ÷ 目标总变化(方向自适应,不看时间进度);ref 型不适用
   let rate = null;
-  if (g) {
+  if (g && !isRef) {
     const total = Math.abs(g.to - g.from);
     const latest = rows[rows.length - 1];
     if (latest && total > 0.0001) {
@@ -438,16 +479,7 @@ function renderMetricChart(metric, rowsRaw, goals) {
     borderWidth: 2.5, tension: 0.35, pointRadius: 3, pointHoverRadius: 5,
     fill: false,
   };
-  const goalLines = (goals || []).filter(x => x.metric === metric).map(goalDataset);
-  // 肌肉量专属:流失预算耗尽线(=终点 59.66,红色点线;到达即预算用尽)
-  if (metric === 'muscleMass' && g && g.to < g.from) {
-    goalLines.push({
-      label: '预算耗尽线',
-      data: [{ x: CFG.xAxisStart, y: g.to }, { x: CFG.xAxisEnd, y: g.to }],
-      borderColor: RED + '66', borderDash: [2, 4], borderWidth: 1.5,
-      pointRadius: 0, fill: false,
-    });
-  }
+  const goalLines = (goals || []).filter(x => x.metric === metric).map(x => goalDataset(x, goals));
   const canvas = document.getElementById(m.chart);
   if (!canvas) return;
   if (charts[metric]) { charts[metric].destroy(); }
@@ -477,12 +509,15 @@ function renderMetricChart(metric, rowsRaw, goals) {
     let text = rate !== null
       ? `${fmt(rows[rows.length - 1][metric])}${unit}（达成率 ${rate}%）`
       : `${fmt(rows[rows.length - 1][metric])}${unit}`;
-    // 肌肉量:末点标注追加预算消耗口径(8%流失预算)
-    if (metric === 'muscleMass' && g && g.to < g.from) {
-      const used = Math.max(0, (g.from - rows[rows.length - 1][metric]) / (g.from - g.to) * 100);
-      text = `${fmt(rows[rows.length - 1][metric])}${unit}（预算已用 ${Math.min(100, Math.round(used))}%/8%）`;
+    // 肌肉量(ref 型):末点标注 = 当前值 vs 今日参考值,偏差 > 容差(0.5)标警
+    if (isRef && refValToday != null) {
+      const dev = rows[rows.length - 1][metric] - refValToday;
+      const tol = g.refTolerance != null ? g.refTolerance : 0.5;
+      text = `${fmt(rows[rows.length - 1][metric])}${unit}（参考 ${fmt(refValToday)} ${dev >= 0 ? '+' : ''}${fmt(dev)}）`;
+      labels.push({ idx: rows.length - 1, text, color: dev < -tol ? RED : m.color });
+    } else {
+      labels.push({ idx: rows.length - 1, text, color: m.color });
     }
-    labels.push({ idx: rows.length - 1, text, color: m.color });
   }
   charts[metric].$pointLabels = labels;
 }
