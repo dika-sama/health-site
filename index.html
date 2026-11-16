@@ -317,7 +317,8 @@ const METRICS = {
   fatMass:    { label: '脂肪量 (kg)',   color: '#e08c2f', chart: 'chart-fatMass' },
   muscleMass: { label: '肌肉量 (kg)',   color: '#4f7cff', chart: 'chart-muscleMass' },
   // 占比指标由绝对量现场计算: 体脂率=fatMass/weight, 肌肉率=muscleMass/weight (不再直接记录)
-  // 以下维度的 standard/dailyGoal/yMin/yMax/overColor 全部由 CFG.standards 注入
+  // 以下维度的 standard/yMin/yMax/overColor 全部由 CFG.standards 注入
+  // (overColor 现仅用于 Review 页达标方向判定,不再用于柱状图着色)
   activeEnergy:   { label: '活动消耗 (kcal)', color: '#e08c2f', chart: 'chart-activeEnergy',   bar: true },
   dietaryKcal:    { label: '热量 (kcal)',     color: '#f0c419', chart: 'chart-dietaryKcal',    bar: true },
   dietaryProtein: { label: '蛋白质 (g)',      color: '#f0c419', chart: 'chart-dietaryProtein', bar: true },
@@ -330,7 +331,6 @@ function applyConfig() {
     const m = METRICS[key];
     if (!m) continue;
     m.standard = std.value;              // 统一字段:标准线值
-    m.dailyGoal = std.value;             // 兼容活动图旧字段
     m.yMin = std.yMin; m.yMax = std.yMax;
     m.overColor = std.overColor === 'green' ? GREEN : RED;
   }
@@ -635,58 +635,44 @@ function renderMetricChart(metric, rowsRaw, goals) {
   charts[metric].$pointLabels = labels;
 }
 
-/* ---------- 活动维度柱状图(水平目标虚线,纵轴固定范围,横轴与趋势图一致) ---------- */
-function renderBarChart(m, series) {
-  // 与饮食图同构:标准线横贯全图,超出目标的部分堆叠展示(活动消耗=绿色,达标是好事)
-  renderPlainBarChart({ ...m, standard: m.dailyGoal, overColor: m.overColor != null ? m.overColor : GREEN }, series);
-}
-
-/* ---------- 饮食柱状图(黄色柱,标准虚线横贯全图,超标准标红/绿色) ---------- */
+/* ---------- 行为维度柱状图(单色实心柱 + 标准灰色虚线;纵轴统一从 0 起,上限取 config) ---------- */
+// 2026-11-16 改版:取消「超出部分单独分段 + 红/绿着色」逻辑——柱子只画当天总量(单色),
+// 纵轴一律从 0 开始(上限不动)。yMin 不为 0 时柱高与鼠标悬停数字对不上,统一归零。
 function renderPlainBarChart(m, seriesRaw) {
   const canvas = document.getElementById(m.chart);
   // 时间范围过滤:选月视图时只画该月的柱
   const series = (VIEW.start == null) ? seriesRaw : seriesRaw.filter(p => p.x >= VIEW.start && p.x <= VIEW.end);
   if (!canvas || !series.length) return;
 
-  const datasets = [];
+  const datasets = [
+    { label: m.label, type: 'bar', data: series, backgroundColor: (m.color || '#f0c419') + 'cc',
+      borderRadius: 3, barPercentage: 0.8, categoryPercentage: 0.9 },
+  ];
   if (m.standard != null) {
-    // 堆叠两段:黄色段 = min(值, 标准);超出段 = |值-标准|,颜色由 overColor 决定(默认红,可绿)
-    const overColor = (m.overColor != null ? m.overColor : RED) + 'cc';
-    const base = series.map(p => ({ x: p.x, y: p.y == null ? null : Math.min(p.y, m.standard) }));
-    const over = series.map(p => ({ x: p.x, y: p.y == null || p.y <= m.standard ? null : p.y - m.standard }));
-    datasets.push(
-      { label: m.label, type: 'bar', data: base, backgroundColor: m.color + 'cc',
-        borderRadius: 3, barPercentage: 0.8, categoryPercentage: 0.9, stack: 's' },
-      { label: '超出', type: 'bar', data: over, backgroundColor: overColor,
-        borderRadius: 3, barPercentage: 0.8, categoryPercentage: 0.9, stack: 's' },
-    );
-    // 标准虚线:横贯整个时间轴(轴首 → 轴尾),不只到数据处
+    // 标准线:灰色虚线横贯整个时间轴(轴首 → 轴尾),仅作参考,不做超出着色
     datasets.push({
       label: '标准', type: 'line',
       data: [{ x: axMin(), y: m.standard }, { x: axMax(), y: m.standard }],
-      borderColor: RED + '99', borderDash: [6, 6], borderWidth: 1.5,
+      borderColor: '#9aa0a699', borderDash: [6, 6], borderWidth: 1.5,
       pointRadius: 0, tension: 0, fill: false,
     });
-  } else {
-    datasets.push({ label: m.label, type: 'bar', data: series, backgroundColor: m.color + 'cc',
-      borderRadius: 3, barPercentage: 0.8, categoryPercentage: 0.9 });
   }
 
   if (charts[m.chart]) charts[m.chart].destroy();
-  // 悬停提示:显示当天总量(黄段+超出段之和),不显示堆叠分段
+  // 悬停提示:当天总量;按本地日期取键(修 toISOString 的 UTC 时区偏移,原查不到值)
+  const dayKey = (d) => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
   const totalLookup = Object.fromEntries(series.map(p => [String(p.x).slice(0, 10), p.y]));
   const tooltipCfg = {
     plugins: {
       legend: { display: false },
       tooltip: {
-        filter: (item) => item.datasetIndex !== 2,             // 不提示标准线
+        filter: (item) => item.dataset.label !== '标准',
         callbacks: {
           title: (items) => (items[0] && items[0].parsed && items[0].parsed.x != null)
             ? new Date(items[0].parsed.x).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
             : '',
           label: (item) => {
-            const d = new Date(item.parsed.x).toISOString().slice(0, 10);
-            const total = totalLookup[d];
+            const total = totalLookup[dayKey(new Date(item.parsed.x))];
             return total == null ? '' : `${m.label}: ${fmt(total)}`;
           },
         },
@@ -701,7 +687,7 @@ function renderPlainBarChart(m, seriesRaw) {
       parsing: { xAxisKey: 'x', yAxisKey: 'y' },
       scales: {
         x: { type: 'time', min: axMin(), max: axMax(), offset: false, time: { unit: 'week', displayFormats: { week: 'M/d' } } },
-        y: { min: m.yMin, max: m.yMax, stacked: m.standard != null, afterFit: (sc) => { sc.width = 46; } },
+        y: { min: 0, max: m.yMax, afterFit: (sc) => { sc.width = 46; } },
       },
       ...tooltipCfg,
     },
@@ -957,7 +943,7 @@ function metricHint(key, goals) {
     return `目标 ${fmt(first.from)} → ${fmt(first.to)} ${mid}`;
   }
   const std = m.standard;
-  if (std != null) return `标准 ${fmt(std)}，${m.overColor === GREEN ? '超出 = 绿色' : '红色 = 超出'}`;
+  if (std != null) return `标准 ${fmt(std)}`;
   return '';
 }
 
@@ -991,7 +977,6 @@ function renderSettings(goals) {
     <td>${METRICS[key] && METRICS[key].label ? METRICS[key].label : key}</td>
     <td class="num">${fmt(s.value)}</td>
     <td class="num">${s.yMin} ~ ${s.yMax}</td>
-    <td>${s.overColor === 'green' ? '超出=绿' : '超出=红'}</td>
   </tr>`).join('');
   el.innerHTML = `
     <table style="margin-bottom:20px">
@@ -999,7 +984,7 @@ function renderSettings(goals) {
       <tbody>${goalRows}</tbody>
     </table>
     <table>
-      <thead><tr><th>每日标准</th><th>标准值</th><th>纵轴范围</th><th>超出颜色</th></tr></thead>
+      <thead><tr><th>每日标准</th><th>标准值</th><th>纵轴范围</th></tr></thead>
       <tbody>${stdRows}</tbody>
     </table>
     <p style="font-size:12px;color:var(--muted);margin-top:10px">横轴范围:${CFG.xAxisStart} ~ ${CFG.xAxisEnd}(所有图统一)</p>`;
