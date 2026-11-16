@@ -387,7 +387,7 @@ function renderStats(rowsRaw, trainLogToday) {
 // phi(瘦体重流失占减重比):starve 饿瘦=40%(实测)/ protein 吃够蛋白=15% / both 蛋白+抗阻=8%
 // 核心机制:瘦组织能量密度 ~1500 kcal/kg,脂肪 7700 kcal/kg——同缺口下烧肌肉掉秤快、烧脂肪掉秤慢。
 // 三条线斜率不同(速率 ∝ 1/混合密度);78kg 穿透点:饿瘦 2027-01-24 / 蛋白 02-23 / 抗阻 03-03。
-function goalDataset(g) {
+function goalDataset(g, goals) {
   const start = new Date(g.start + 'T00:00:00'), end = new Date(g.end + 'T00:00:00');
   const N = (end - start) / 86400e3;
   // 全周期线性:from -> to,每 3 天一个点
@@ -407,6 +407,38 @@ function goalDataset(g) {
       ['protein', '蛋白(不抗阻)', '#e08c2f' + 'cc', 1.5],
       ['starve', '饿瘦(掉秤快)', RED + '88', 1.5],
     ];
+    // 体脂率 = 派生指标:每个点 = 当天脂肪情形值 / 当天体重情形值 x 100(两条线性线的比值,全程凸形)
+    // 不能自己当独立线性线——那会让「78 快照」错用到 78 之后
+    if (g.metric === 'bodyFat' && goals) {
+      const wg = goals.find(x => x.metric === 'weight');
+      const fg = goals.find(x => x.metric === 'fatMass');
+      if (wg && fg && wg.scenarios && fg.scenarios) {
+        sc.forEach(([key, label, color, w]) => {
+          const sw = wg.scenarios[key], sf = fg.scenarios[key];
+          if (!sw || !sf || sw.to == null || sf.to == null) return;
+          const pts = [];
+          for (let t = start.getTime(); t <= end.getTime(); t += 3 * 86400e3) {
+            const n = (t - start.getTime()) / 86400e3;
+            const wv = wg.from + (sw.to - wg.from) * (n / N);
+            const fv = fg.from + (sf.to - fg.from) * (n / N);
+            pts.push({ x: new Date(t), y: fv / wv * 100 });
+          }
+          const wvE = sw.to, fvE = sf.to;
+          pts.push({ x: end, y: fvE / wvE * 100 });
+          lines.push({
+            label: `${label} ${fmt(fvE / wvE * 100)}`,
+            data: pts,
+            borderColor: color,
+            borderDash: [3, 5],
+            borderWidth: w,
+            pointRadius: 0,
+            tension: 0,
+            fill: false,
+          });
+        });
+        return lines;
+      }
+    }
     sc.forEach(([key, label, color, w]) => {
       const s = g.scenarios[key];
       if (!s || s.to == null) return;
@@ -486,7 +518,7 @@ function renderMetricChart(metric, rowsRaw, goals) {
     fill: false,
   };
   const goalLines = [];
-  (goals || []).filter(x => x.metric === metric).forEach(x => goalDataset(x).forEach(d => goalLines.push(d)));
+  (goals || []).filter(x => x.metric === metric).forEach(x => goalDataset(x, goals).forEach(d => goalLines.push(d)));
   const canvas = document.getElementById(m.chart);
   if (!canvas) return;
   if (charts[metric]) { charts[metric].destroy(); }
