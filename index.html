@@ -383,10 +383,14 @@ function renderStats(rowsRaw, trainLogToday) {
 }
 
 /* ---------- 目标趋势线 ---------- */
-// 三情形模型(2026-11-16 定版):起点 10/18 基数(89.3/25.0/60.8,其他 3.5),固定缺口 600kcal/天,全程 164 天线性外推,到 78 不收口。
-// phi(瘦体重流失占减重比):starve 饿瘦=40%(实测)/ protein 吃够蛋白=15% / both 蛋白+抗阻=8%
-// 核心机制:瘦组织能量密度 ~1500 kcal/kg,脂肪 7700 kcal/kg——同缺口下烧肌肉掉秤快、烧脂肪掉秤慢。
-// 三条线斜率不同(速率 ∝ 1/混合密度);78kg 穿透点:饿瘦 2027-01-24 / 蛋白 02-23 / 抗阻 03-03。
+// 行为分档模型(2026-11-16 定版):锚点=当日实测(86.7/23.6/59.7,其他3.4),三线从锚点画到 2027-03-31 止,不收口。
+// 三线=三种行为的走向(不是三档理想值),区分的是掉的体重里肌肉占比 phi:
+//   A(both)  每周3次抗阻+蛋白达标  phi=15%,0.62kg/周,75kg@2027-03-28,3/31端点 74.7kg/体脂18.0%
+//   B(protein) 无抗阻+蛋白达标      phi=25%,0.68kg/周,75kg@2027-03-16,3/31端点 73.5kg/体脂18.7%
+//   C(starve)  蛋白不达标(饿瘦)      phi=40%,0.80kg/周,75kg@2027-02-26,3/31端点 71.2kg/体脂20.1%
+// 核心机制:瘦组织能量密度 ~1500 kcal/kg,脂肪 7700 kcal/kg——同缺口下烧肌肉掉秤快、烧脂肪掉秤慢;三种行为每周烧的脂肪几乎相同(0.53/0.51/0.48),差的全在肌肉。
+// 旧模型(10/18起,starve40/protein15/both8)的 3/31 端点体脂 16.9%/16.4% 属满执行理想线,已废弃;重新定版时三线须以当日实测重锚。
+
 function goalDataset(g, goals) {
   const start = new Date(g.start + 'T00:00:00'), end = new Date(g.end + 'T00:00:00');
   const N = (end - start) / 86400e3;
@@ -403,9 +407,9 @@ function goalDataset(g, goals) {
   const lines = [];
   if (g.scenarios) {
     const sc = [
-      ['both', '蛋白+抗阻', GREEN + 'aa', 2],
-      ['protein', '蛋白(不抗阻)', '#e08c2f' + 'cc', 1.5],
-      ['starve', '饿瘦(掉秤快)', RED + '88', 1.5],
+      ['both', 'A·3次抗阻+蛋白', GREEN + 'aa', 2],
+      ['protein', 'B·无抗阻+蛋白', '#e08c2f' + 'cc', 1.5],
+      ['starve', 'C·蛋白不足', RED + '88', 1.5],
     ];
     // 体脂率 = 派生指标:每个点 = 当天脂肪情形值 / 当天体重情形值 x 100(两条线性线的比值,全程凸形)
     // 不能自己当独立线性线——那会让「78 快照」错用到 78 之后
@@ -499,9 +503,9 @@ function renderMetricChart(metric, rowsRaw, goals) {
   const rows = rowsRaw.filter(inView).map(derived);   // 现场计算占比字段(bodyFat/muscle)
   if (!rows.length) return;
 
-  // 达成率 = 当前总进度:实际完成变化 ÷ 目标总变化(方向自适应,不看时间进度)
+  // 达成率 = 当前总进度:实际完成变化 ÷ 目标总变化(方向自适应,不看时间进度);体脂率等「参考」指标不计算率
   let rate = null;
-  if (g) {
+  if (g && (g.label || '').indexOf('参考') < 0) {
     const total = Math.abs(g.to - g.from);
     const latest = rows[rows.length - 1];
     if (latest && total > 0.0001) {
@@ -850,6 +854,8 @@ function metricHint(key, goals) {
     const fmtDate = (d) => { const [, mm, dd] = d.split('-'); return `${+mm}/${+dd}`; };
     if (gs.length === 1) {
       const g = gs[0];
+      // 体脂率等「参考,非目标」指标:不写「目标」,标为参考区间
+      if ((g.label || '').indexOf('参考') >= 0) return `参考(非目标) ${fmt(g.from)} → ${fmt(g.to)}（${fmtDate(g.end)}）`;
       if (g.from === g.to) return `目标 ${g.direction === 'maintain' ? '≥' : ''} ${fmt(g.to)} 维持（${fmtDate(g.end)}）`;
       return `目标 ${fmt(g.from)} → ${fmt(g.to)}（${fmtDate(g.end)}）`;
     }
