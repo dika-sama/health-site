@@ -383,31 +383,24 @@ function renderStats(rowsRaw, trainLogToday) {
 }
 
 /* ---------- 目标趋势线 ---------- */
-// 三情形模型(2026-11-16 定版):固定缺口 600kcal/天,phi(瘦体重流失占减重比)分档:
-//   starve 饿瘦=40%(实测) / protein 吃够蛋白=15% / both 蛋白+抗阻=8%
+// 三情形模型(2026-11-16 定版):起点 10/18 基数(89.3/25.0/60.8,其他 3.5),固定缺口 600kcal/天,全程 164 天线性外推,到 78 不收口。
+// phi(瘦体重流失占减重比):starve 饿瘦=40%(实测)/ protein 吃够蛋白=15% / both 蛋白+抗阻=8%
 // 核心机制:瘦组织能量密度 ~1500 kcal/kg,脂肪 7700 kcal/kg——同缺口下烧肌肉掉秤快、烧脂肪掉秤慢。
-// 三条线斜率不同(速率 ∝ 1/混合密度),全部在各自「到 78 天数」处收口转维持(水平线到 3/31)。
-// 78 收口时肌肉+脂肪+3.4(其他)=78 配平:到 78 那天的体脂率 = 该情形的成分快照。
+// 三条线斜率不同(速率 ∝ 1/混合密度);78kg 穿透点:饿瘦 2027-01-24 / 蛋白 02-23 / 抗阻 03-03。
 function goalDataset(g) {
   const start = new Date(g.start + 'T00:00:00'), end = new Date(g.end + 'T00:00:00');
   const N = (end - start) / 86400e3;
-  // 情形线:分段线性——[start, 到78日] 匀速下降,[到78日, end] 维持水平
-  const mkSeg = (to, days) => {
-    const hitT = start.getTime() + Math.min(days, N) * 86400e3;   // 到 78 的时刻(3/31 前则收口,否则一路降)
+  // 全周期线性:from -> to,每 3 天一个点
+  const mkPts = (from, to) => {
     const pts = [];
-    for (let t = start.getTime(); t <= Math.min(hitT, end.getTime()); t += 3 * 86400e3) {
+    for (let t = start.getTime(); t <= end.getTime(); t += 3 * 86400e3) {
       const n = (t - start.getTime()) / 86400e3;
-      pts.push({ x: new Date(t), y: g.from + (to - g.from) * (n / Math.min(days, N)) });
+      pts.push({ x: new Date(t), y: from + (to - from) * (n / N) });
     }
-    pts.push({ x: new Date(Math.min(hitT, end.getTime())), y: to });   // 收口点(=端点值)
-    if (hitT < end.getTime()) {
-      for (let t = hitT + 3 * 86400e3; t <= end.getTime(); t += 3 * 86400e3) pts.push({ x: new Date(t), y: to });   // 维持段
-      pts.push({ x: end, y: to });
-    }
+    pts.push({ x: end, y: to });
     return pts;
   };
   const lines = [];
-  // 名义目标线(中档=蛋白情形)不再单独画:三情形线已覆盖
   if (g.scenarios) {
     const sc = [
       ['both', '蛋白+抗阻', GREEN + 'aa', 2],
@@ -419,7 +412,7 @@ function goalDataset(g) {
       if (!s || s.to == null) return;
       lines.push({
         label: `${label} ${fmt(s.to)}`,
-        data: mkSeg(s.to, s.days != null ? s.days : N),
+        data: mkPts(g.from, s.to),
         borderColor: color,
         borderDash: [3, 5],
         borderWidth: w,
@@ -429,16 +422,9 @@ function goalDataset(g) {
       });
     });
   } else if (g.to != null) {
-    // 无情形字段:退化为普通目标线(全周期线性到 to)
-    const pts = [];
-    for (let t = start.getTime(); t <= end.getTime(); t += 3 * 86400e3) {
-      const n = (t - start.getTime()) / 86400e3;
-      pts.push({ x: new Date(t), y: g.from + (g.to - g.from) * (n / N) });
-    }
-    pts.push({ x: end, y: g.to });
     lines.push({
       label: `目标线 ${fmt(g.to)}`,
-      data: pts,
+      data: mkPts(g.from, g.to),
       borderColor: METRICS[g.metric].color + '88',
       borderDash: [6, 6],
       borderWidth: 2,
