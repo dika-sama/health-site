@@ -439,6 +439,15 @@ function renderMetricChart(metric, rowsRaw, goals) {
     fill: false,
   };
   const goalLines = (goals || []).filter(x => x.metric === metric).map(goalDataset);
+  // 肌肉量专属:流失预算耗尽线(=终点 59.66,红色点线;到达即预算用尽)
+  if (metric === 'muscleMass' && g && g.to < g.from) {
+    goalLines.push({
+      label: '预算耗尽线',
+      data: [{ x: CFG.xAxisStart, y: g.to }, { x: CFG.xAxisEnd, y: g.to }],
+      borderColor: RED + '66', borderDash: [2, 4], borderWidth: 1.5,
+      pointRadius: 0, fill: false,
+    });
+  }
   const canvas = document.getElementById(m.chart);
   if (!canvas) return;
   if (charts[metric]) { charts[metric].destroy(); }
@@ -465,9 +474,14 @@ function renderMetricChart(metric, rowsRaw, goals) {
   const unit = unitM ? unitM[1] : '';
   labels.push({ idx: 0, text: `${fmt(rows[0][metric])}${unit}`, color: m.color });
   if (rows.length > 1) {
-    const text = rate !== null
+    let text = rate !== null
       ? `${fmt(rows[rows.length - 1][metric])}${unit}（达成率 ${rate}%）`
       : `${fmt(rows[rows.length - 1][metric])}${unit}`;
+    // 肌肉量:末点标注追加预算消耗口径(8%流失预算)
+    if (metric === 'muscleMass' && g && g.to < g.from) {
+      const used = Math.max(0, (g.from - rows[rows.length - 1][metric]) / (g.from - g.to) * 100);
+      text = `${fmt(rows[rows.length - 1][metric])}${unit}（预算已用 ${Math.min(100, Math.round(used))}%/8%）`;
+    }
     labels.push({ idx: rows.length - 1, text, color: m.color });
   }
   charts[metric].$pointLabels = labels;
