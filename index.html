@@ -256,7 +256,7 @@
         </div>
         <div class="card">
           <h2>🍽️ 三餐怎么吃</h2>
-          <div class="hint">配平目标:蛋白 140g / 碳水 220g / 脂肪 65g ≈ 2050 kcal;先定蛋白,再配主食和菜</div>
+          <div class="hint">配平目标:蛋白 120-140g / 碳水 220g / 脂肪 65g ≈ 1950-2050 kcal;先定蛋白,再配主食和菜</div>
           <div class="scroll"><table id="mealTable">
             <thead><tr><th>餐次</th><th>蛋白</th><th>热量</th><th>建议吃什么</th><th>替换 / 避雷</th></tr></thead>
             <tbody></tbody>
@@ -384,14 +384,16 @@ function renderStats(rowsRaw, trainLogToday) {
 
 /* ---------- 目标趋势线 ----------
 // 行为分档模型(2026-11-16 定版):锚点=10/18 基数(89.3/25.0/60.8,其他3.5),线从 10/18 画到 2027-03-31,便于回顾已发生阶段。
-// A/B/C 三线=三种行为若永远保持的走向(虚线,600缺口满执行+体重^0.75适应):
+// A/B/C 三线=三种行为若永远保持的走向(虚线,均按 600kcal/天缺口满执行外推+体重^0.75适应):
 //   A(both)  每周3次抗阻+蛋白达标  phi=15%,3/31端点75.6kg/体脂17.7%
 //   B(protein) 无抗阻+蛋白达标      phi=25%,3/31端点74.3kg/体脂18.5%
 //   C(starve)  蛋白不达标(饿瘦)      phi=40%,3/31端点71.8kg/体脂20.2%
+//   D(deficit) 缺口未满~350         phi=35%,3/31端点78.9kg/体脂23.1%——缺口差 250kcal/天,
+//     135 天少掉约 10kg;这不是第四档行为,而是「缺口没吃够+没练够」的状态代价
 // 承诺线(committed)=分段折线,反映行为会变的现实:10/18→11/16已发生(φ32%/兑现66%,复现实测)→11/16→12/14现状→12/14→1/11转A适应→1/11→3/31稳定A。
 // 承诺线 3/31 端点 77.7kg/体脂20.9%,75kg 约 2027-05-17;数据在 goals.json scenarios.committed.phases(每段一个终点,前端段间线性插值)。
 // 核心机制:瘦组织能量密度 ~1500 kcal/kg,脂肪 7700 kcal/kg;三种行为每周烧的脂肪几乎相同(0.53/0.51/0.48),差的全在肌肉。
-// 体脂率线:承诺线与 A/B/C 都用「当天脂肪/当天体重」逐点导出(凸形);「参考(非目标)」指标不画达成率。
+// 体脂率线:承诺线与 A/B/C/D 都用「当天脂肪/当天体重」逐点导出(凸形);「参考(非目标)」指标不画达成率。
  */
 function goalDataset(g, goals) {
   const start = new Date(g.start + 'T00:00:00'), end = new Date(g.end + 'T00:00:00');
@@ -425,10 +427,12 @@ function goalDataset(g, goals) {
 
   const lines = [];
   if (g.scenarios) {
+    // 标签后缀标缺口假设:.·600=满执行,·350=当前实测缺口;D=缺口未满线
     const sc = [
-      ['both', 'A·3次抗阻+蛋白', GREEN + 'aa', 2],
-      ['protein', 'B·无抗阻+蛋白', '#e08c2f' + 'cc', 1.5],
-      ['starve', 'C·蛋白不足', RED + '88', 1.5],
+      ['both', 'A·3次抗阻+蛋白·600', GREEN + 'aa', 2],
+      ['protein', 'B·无抗阻+蛋白·600', '#e08c2f' + 'cc', 1.5],
+      ['starve', 'C·蛋白不足·600', RED + '88', 1.5],
+      ['deficit', 'D·缺口未满~350', '#9b59b6' + 'cc', 1.5],
     ];
     // 体脂率 = 派生指标:每个点 = 当天脂肪情形值 / 当天体重情形值 x 100(两条线性线的比值,全程凸形)
     // 不能自己当独立线性线——那会让「78 快照」错用到 78 之后
@@ -932,7 +936,9 @@ function metricHint(key, goals) {
         const keyMap = { weight: 'weight', fatMass: 'fat', muscleMass: 'muscle' };
         const k = keyMap[g.metric] || 'weight';
         const endV = commitEnd[k];
-        return `目标 ${fmt(g.from)} → ${fmt(g.to)}（${fmtDate(g.end)}） · 承诺线 ${fmt(endV)}（${fmtDate(commitEnd.end)}）`;
+        let s = `目标 ${fmt(g.from)} → ${fmt(g.to)}（${fmtDate(g.end)}） · 承诺线 ${fmt(endV)}（${fmtDate(commitEnd.end)}）`;
+        if (g.metric === 'weight') s += ' · A/B/C=600缺口 · D=实测350缺口';
+        return s;
       }
       if (g.from === g.to) return `目标 ${g.direction === 'maintain' ? '≥' : ''} ${fmt(g.to)} 维持（${fmtDate(g.end)}）`;
       return `目标 ${fmt(g.from)} → ${fmt(g.to)}（${fmtDate(g.end)}）`;

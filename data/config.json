@@ -15,7 +15,7 @@
       "overColor": "red"
     },
     "dietaryProtein": {
-      "value": 140,
+      "value": 120,
       "yMin": 0,
       "yMax": 200,
       "overColor": "green"
