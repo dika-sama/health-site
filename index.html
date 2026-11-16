@@ -403,7 +403,7 @@ function goalDataset(g, goals) {
   if (endY != null) pts.push({ x: end, y: endY });
   const refTag = g.curve === 'ref' ? '参考' : '目标';
   const endLabel = g.curve === 'ref' ? `参考${g.refMinus != null ? '(−' + g.refMinus + '其他)' : ''}` : `${fmt(g.to)}`;
-  return {
+  const lines = [{
     label: `${refTag}线 ${endLabel}`,
     data: pts,
     borderColor: METRICS[g.metric].color + '88',
@@ -412,7 +412,30 @@ function goalDataset(g, goals) {
     pointRadius: 0,
     tension: 0,
     fill: false,
-  };
+  }];
+  // ref 型专属:抗阻保护线(g.protect,抗阻+足量蛋白结局);两条线之间 = 抗阻训练的价值区间
+  if (g.curve === 'ref' && g.protect) {
+    const pPts = [];
+    const pk = 0.0055;   // 与体重/脂肪曲线同节奏
+    const pdenom = 1 - Math.exp(-pk * N);
+    const pVal = (t) => {
+      const n = (t - start.getTime()) / 86400e3;
+      return g.protect.to + (g.protect.from - g.protect.to) * (Math.exp(-pk * n) - Math.exp(-pk * N)) / pdenom;
+    };
+    for (let t = start.getTime(); t <= end.getTime(); t += 3 * 86400e3) pPts.push({ x: new Date(t), y: pVal(t) });
+    pPts.push({ x: end, y: pVal(end.getTime()) });
+    lines.push({
+      label: `保护线(抗阻) ${fmt(g.protect.to)}`,
+      data: pPts,
+      borderColor: GREEN + 'aa',
+      borderDash: [3, 5],
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0,
+      fill: false,
+    });
+  }
+  return lines;
 }
 
 /* ---------- 三张独立趋势图 ---------- */
@@ -479,7 +502,8 @@ function renderMetricChart(metric, rowsRaw, goals) {
     borderWidth: 2.5, tension: 0.35, pointRadius: 3, pointHoverRadius: 5,
     fill: false,
   };
-  const goalLines = (goals || []).filter(x => x.metric === metric).map(x => goalDataset(x, goals));
+  const goalLines = [];
+  (goals || []).filter(x => x.metric === metric).forEach(x => goalDataset(x, goals).forEach(d => goalLines.push(d)));
   const canvas = document.getElementById(m.chart);
   if (!canvas) return;
   if (charts[metric]) { charts[metric].destroy(); }
