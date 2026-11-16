@@ -93,7 +93,8 @@
   "exerciseMin": 103.0,
   "standMin": 270.0,
   "restingHR": 70.0,
-  "respRate": 15.8
+  "respRate": 15.8,
+  "sleepHours": 6.2
  },
  "2026-10-25": {
   "hrMax": 160.0,
@@ -105,7 +106,8 @@
   "exerciseMin": 28.0,
   "standMin": 245.0,
   "restingHR": 63.0,
-  "respRate": 15.4
+  "respRate": 15.4,
+  "sleepHours": 7.7
  },
  "2026-10-26": {
   "hrMax": 159.0,
@@ -117,7 +119,8 @@
   "exerciseMin": 54.0,
   "standMin": 134.0,
   "restingHR": 63.0,
-  "respRate": 16.2
+  "respRate": 16.2,
+  "sleepHours": 5.7
  },
  "2026-10-27": {
   "hrMax": 110.0,
@@ -133,7 +136,8 @@
   "dietaryKcal": 1649,
   "dietaryProtein": 110,
   "dietaryCarbs": 135,
-  "dietaryFat": 59
+  "dietaryFat": 59,
+  "sleepHours": 5.8
  },
  "2026-10-28": {
   "hrMax": 147.0,
@@ -149,7 +153,8 @@
   "dietaryKcal": 1972,
   "dietaryProtein": 126,
   "dietaryCarbs": 176,
-  "dietaryFat": 99
+  "dietaryFat": 99,
+  "sleepHours": 6.9
  },
  "2026-10-29": {
   "hrMax": 106.0,
@@ -165,7 +170,8 @@
   "dietaryKcal": 1676,
   "dietaryProtein": 101,
   "dietaryCarbs": 156,
-  "dietaryFat": 51
+  "dietaryFat": 51,
+  "sleepHours": 6.1
  },
  "2026-10-30": {
   "hrMax": 107.0,
@@ -181,7 +187,8 @@
   "dietaryKcal": 2170,
   "dietaryProtein": 127,
   "dietaryCarbs": 213,
-  "dietaryFat": 107
+  "dietaryFat": 107,
+  "sleepHours": 5.5
  },
  "2026-10-31": {
   "hrMax": 171.0,
@@ -197,7 +204,8 @@
   "dietaryKcal": 1383,
   "dietaryProtein": 93,
   "dietaryCarbs": 156,
-  "dietaryFat": 64
+  "dietaryFat": 64,
+  "sleepHours": 5.4
  },
  "2026-11-01": {
   "hrMax": 117.0,
@@ -210,7 +218,8 @@
   "restingHR": 52.0,
   "respRate": 15.9,
   "dietaryCarbs": 106,
-  "dietaryFat": 27
+  "dietaryFat": 27,
+  "sleepHours": 5.6
  },
  "2026-11-02": {
   "hrMax": 103.0,
@@ -222,7 +231,8 @@
   "exerciseMin": 9.0,
   "standMin": 42.0,
   "restingHR": 52.0,
-  "respRate": 16.2
+  "respRate": 16.2,
+  "sleepHours": 5.8
  },
  "2026-11-03": {
   "hrMax": 108.0,
@@ -234,7 +244,8 @@
   "exerciseMin": 16.0,
   "standMin": 75.0,
   "restingHR": 57.0,
-  "respRate": 15.7
+  "respRate": 15.7,
+  "sleepHours": 4.9
  },
  "2026-11-04": {
   "hrMax": 141.0,
@@ -246,7 +257,8 @@
   "exerciseMin": 5.0,
   "standMin": 54.0,
   "restingHR": 58.0,
-  "respRate": 15.7
+  "respRate": 15.7,
+  "sleepHours": 5.6
  },
  "2026-11-05": {
   "hrMax": 109.17,
@@ -269,7 +281,8 @@
   "exerciseMin": 60.0,
   "standMin": 130.0,
   "restingHR": 58.0,
-  "respRate": 15.5
+  "respRate": 15.5,
+  "sleepHours": 6.1
  },
  "2026-11-07": {
   "hrMax": 172.0,
@@ -280,7 +293,8 @@
   "exerciseMin": 27.0,
   "standMin": 163.0,
   "restingHR": 63.0,
-  "respRate": 15.4
+  "respRate": 15.4,
+  "sleepHours": 5.2
  },
  "2026-11-08": {
   "hrMax": 123.0,
@@ -291,7 +305,8 @@
   "exerciseMin": 44.0,
   "standMin": 210.0,
   "restingHR": 59.0,
-  "respRate": 16.0
+  "respRate": 16.0,
+  "sleepHours": 5.5
  },
  "2026-11-09": {
   "hrMax": 129.43,
@@ -307,7 +322,8 @@
   "dietaryKcal": 2009,
   "dietaryProtein": 137,
   "dietaryCarbs": 136,
-  "dietaryFat": 98
+  "dietaryFat": 98,
+  "sleepHours": 6.8
  },
  "2026-11-10": {
   "hrMax": 113.0,
@@ -323,7 +339,8 @@
   "dietaryKcal": 1929,
   "dietaryProtein": 107,
   "dietaryCarbs": 218,
-  "dietaryFat": 64
+  "dietaryFat": 64,
+  "sleepHours": 5.9
  },
  "2026-11-11": {
   "hrMax": 122.0,
@@ -338,7 +355,8 @@
   "dietaryKcal": 2124,
   "dietaryProtein": 140,
   "dietaryCarbs": 186,
-  "dietaryFat": 89
+  "dietaryFat": 89,
+  "sleepHours": 5.1
  },
  "2026-11-12": {
   "hrMax": 109.0,
@@ -354,7 +372,8 @@
   "dietaryKcal": 1982,
   "dietaryProtein": 111,
   "dietaryCarbs": 193,
-  "dietaryFat": 84
+  "dietaryFat": 84,
+  "sleepHours": 5.1
  },
  "2026-11-13": {
   "hrMax": 120.0,
@@ -370,7 +389,8 @@
   "dietaryKcal": 1603,
   "dietaryProtein": 101,
   "dietaryCarbs": 152,
-  "dietaryFat": 95
+  "dietaryFat": 95,
+  "sleepHours": 7.3
  },
  "2026-11-14": {
   "hrMax": 152.0,
@@ -385,7 +405,8 @@
   "dietaryKcal": 1887,
   "dietaryProtein": 113,
   "dietaryCarbs": 176,
-  "dietaryFat": 45
+  "dietaryFat": 45,
+  "sleepHours": 6.4
  },
  "2026-11-15": {
   "hrMax": 108.0,
@@ -400,7 +421,8 @@
   "dietaryKcal": 1720,
   "dietaryProtein": 124,
   "dietaryCarbs": 222,
-  "dietaryFat": 51
+  "dietaryFat": 51,
+  "sleepHours": 7.6
  },
  "2026-11-16": {
   "hrMax": 99.0,
@@ -412,6 +434,7 @@
   "exerciseMin": 5.0,
   "standMin": 24.0,
   "restingHR": 49.0,
-  "respRate": 15.6
+  "respRate": 15.6,
+  "sleepHours": 6.3
  }
 }
