@@ -224,9 +224,29 @@
           <div id="reviewDetailBody"></div>
         </div>
         <div class="card">
-          <h2>🧮 自动生成:本期复盘数据</h2>
-          <div class="hint">取最近 14 天,与上一个 14 天对比;行为达标率对照 config 六项标准</div>
-          <div id="reviewAuto"></div>
+          <h2>📊 数据分析</h2>
+          <div class="hint">身体成分 + 瘦体重占比 φ(近14天 vs 上期);φ = 减重中肌肉的占比,越低越好(A=15% / B=25% / C=40% / D=35%)</div>
+          <div id="reviewResult"></div>
+        </div>
+        <div class="card">
+          <h2>🍽️ 吃的怎么样</h2>
+          <div class="hint" id="hint-diet">饮食四项达标率(近14天 vs 上期) · 标准:热量 ≤2050 / 蛋白 ≥120 / 碳水 / 脂肪</div>
+          <div id="reviewDiet"></div>
+        </div>
+        <div class="card">
+          <h2>🏃 运动怎么样</h2>
+          <div class="hint" id="hint-activity">活动量与睡眠(近14天 vs 上期) · 标准:活动 ≥500 / 睡眠 ≥7</div>
+          <div id="reviewActivity"></div>
+        </div>
+        <div class="card">
+          <h2>🏋️ 健身怎么样</h2>
+          <div class="hint">近14天各肌群训练覆盖 · 绿=达标(≥4组) · 黄=不足(1-3组) · 白=未训练</div>
+          <div id="reviewTraining"></div>
+        </div>
+        <div class="card">
+          <h2>💡 自动建议</h2>
+          <div class="hint">按「训练缺口 → 饮食达标 → 数据质量 → 身体分析」排序,前 2 条为下期重点(可检验);人工结论见左侧</div>
+          <div id="reviewAdvice"></div>
         </div>
         <div class="card">
           <h2>📐 Review 方法(固定六步)</h2>
@@ -1060,16 +1080,39 @@ const REVIEW_METHOD = [
   ['④ 目标校准', '只有两种情况动目标:速率持续高于曲线(提前达成)或连续两期落后 >1kg(曲线失真)。观察带内不动——频繁改目标 = 没有目标。'],
   ['⑤ 下期重点(≤2条)', '输出一到两条,格式「接下来两周重点做 X」+ 可检验的标准(如:23:30 前放下手机)。下期 Review 第一件事就是逐条检查做没做到;连续两期未兑现的重点自动升级为下一期唯一重点。'],
 ];
-function renderReview(rows, daily, goals) {
-  // 方法论
+/* ---------- 训练日志动作 → 肌群归类(关键词匹配,顺序=特异度优先:小肌群/专有动作在前) ---------- */
+const MUSCLE_KEYWORDS = [
+  ['臀', ['臀桥', '髋推', '臀推', '臀']],
+  ['小腿', ['提踵', '小腿']],
+  ['三头', ['臂屈伸', '窄距', '三头']],
+  ['二头', ['弯举', '二头']],
+  ['下背', ['超人', '背伸', '下背']],
+  ['核心', ['平板', '卷腹', '死虫', '核心']],
+  ['肩', ['派克', '平举', '面拉', '推举', '反向飞鸟', '肩']],
+  ['胸', ['俯卧撑', '卧推', '飞鸟', '胸']],
+  ['背', ['划船', '引体', '下拉', '背']],
+  ['腿', ['深蹲', '箭步', '腿举', '硬拉', '腿', '蹲']],
+];
+function muscleOf(name) {
+  const n = String(name || '');
+  for (let i = 0; i < MUSCLE_KEYWORDS.length; i++) {
+    if (MUSCLE_KEYWORDS[i][1].some(k => n.indexOf(k) >= 0)) return MUSCLE_KEYWORDS[i][0];
+  }
+  return '其他';
+}
+
+function renderReview(rows, daily, goals, trainLog, training) {
+  // ① 方法论
   document.getElementById('reviewMethod').innerHTML = `<table>
     <thead><tr><th style="width:130px">环节</th><th>看什么 / 判据</th></tr></thead>
     <tbody>${REVIEW_METHOD.map(([t, c]) => `<tr><td><b>${t}</b></td><td>${c}</td></tr>`).join('')}</tbody>
   </table>`;
 
-  // 自动计算:近14天 vs 前14天(占比字段现场派生)
   const rowsD = rows.map(derived);
   const today = new Date();
+  const ymd = (dt) => dt.getFullYear() + '-' + pad2(dt.getMonth() + 1) + '-' + pad2(dt.getDate());
+  const d = (offset) => { const t = new Date(today); t.setDate(t.getDate() - offset); return ymd(t); };
+  const FROM = d(13), TO = d(0), PREV_FROM = d(27), PREV_TO = d(14);
   const seg = (fromD, toD) => {
     const rs = rowsD.filter(r => r.date >= fromD && r.date <= toD);
     const first = rs[0], last = rs[rs.length - 1];
@@ -1083,44 +1126,169 @@ function renderReview(rows, daily, goals) {
       muscleMass: last.muscleMass - first.muscleMass,
     };
   };
-  const d = (offset) => { const t = new Date(today); t.setDate(t.getDate() - offset); return t.toISOString().slice(0, 10); };
-  const cur = seg(d(13), d(0)), prev = seg(d(27), d(14));
-  // 行为达标率(近14天)
+  const cur = seg(FROM, TO), prev = seg(PREV_FROM, PREV_TO);
+
+  /* ② 行为达标率(本期 vs 上期) */
   const stds = CFG.standards || {};
+  const rateOf = (key, from, to) => {
+    const vals = Object.entries(daily).filter(([dt]) => dt >= from && dt <= to).map(([, v]) => v[key]).filter(v => v != null);
+    if (!vals.length || !stds[key]) return null;
+    const s = stds[key], goodUp = s.overColor === 'green';
+    return { n: vals.length, hit: vals.filter(v => goodUp ? v >= s.value : v <= s.value).length,
+      avg: vals.reduce((a, b) => a + b, 0) / vals.length };
+  };
   const behavior = Object.entries(stds).map(([key, s]) => {
-    const vals = Object.entries(daily).filter(([dt]) => dt >= d(13)).map(([, v]) => v[key]).filter(v => v != null);
-    if (!vals.length) return { key, n: 0, hit: 0, avg: null, rate: null, dir: s.overColor };
-    const goodUp = s.overColor === 'green';
-    const hit = vals.filter(v => goodUp ? v >= s.value : v <= s.value).length;
-    return { key, n: vals.length, hit, avg: vals.reduce((a, b) => a + b, 0) / vals.length, rate: hit / vals.length, dir: s.overColor };
+    const c = rateOf(key, FROM, TO), p = rateOf(key, PREV_FROM, PREV_TO);
+    return { key, n: c ? c.n : 0, hit: c ? c.hit : 0, avg: c ? c.avg : null,
+      rate: c ? c.hit / c.n : null, prevRate: p ? p.hit / p.n : null, dir: s.overColor };
   });
 
-  const delta = (v, unit, goodDown) => {
+  /* ③ 数据分析:身体成分 + φ */
+  const cell = (v, unit, goodDown, vPrev) => {
     if (v == null) return '<td>—</td>';
-    const cls = Math.abs(v) < 0.001 ? '' : ((goodDown ? v < 0 : v > 0) ? 'good' : 'bad');
-    return `<td class="num">${v > 0 ? '+' : ''}${fmt(v)}${unit}</td><td class="delta ${cls}">${Math.abs(v) < 0.001 ? '持平' : (v < 0 ? '↓' : '↑')}</td>`;
+    const diff = vPrev == null ? null : v - vPrev;
+    const cls = (diff == null || Math.abs(diff) < 0.001) ? '' : ((goodDown ? diff < 0 : diff > 0) ? 'good' : 'bad');
+    const arr = (diff == null || Math.abs(diff) < 0.001) ? '' : (diff < 0 ? '↓' : '↑');
+    return `<td class="num">${fmt(v)}${unit}</td><td class="delta ${cls}">${arr}</td>`;
   };
-  let html = `<table><thead><tr><th>指标</th><th>本期(14天)</th><th></th><th>上期</th><th></th></tr></thead><tbody>`;
+  let resultHtml = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px">本期 ${FROM} ~ ${TO} · 上期 ${PREV_FROM} ~ ${PREV_TO}</div>`;
+  let phiC = null;
   if (cur && prev) {
-    html += `<tr><td>体重</td>${delta(cur.weight, 'kg', true)}${delta(prev.weight, 'kg', true)}</tr>`;
-    html += `<tr><td>脂肪量</td>${delta(cur.fatMass, 'kg', true)}${delta(prev.fatMass, 'kg', true)}</tr>`;
-    html += `<tr><td>肌肉量</td>${delta(cur.muscleMass, 'kg', false)}${delta(prev.muscleMass, 'kg', false)}</tr>`;
-    html += `<tr><td>体脂率</td>${delta(cur.bodyFat, '', true)}${delta(prev.bodyFat, '', true)}</tr>`;
-    html += `<tr><td>肌肉率</td>${delta(cur.muscle, '', false)}${delta(prev.muscle, '', false)}</tr>`;
+    phiC = cur.weight < 0 ? cur.muscleMass / cur.weight * 100 : null;
+    const phiP = prev.weight < 0 ? prev.muscleMass / prev.weight * 100 : null;
+    resultHtml += `<table><thead><tr><th>指标</th><th>本期</th><th>较上期</th><th>上期</th><th>较再上期</th></tr></thead><tbody>`;
+    resultHtml += `<tr><td>体重</td>${cell(cur.weight, 'kg', true, prev.weight)}${cell(prev.weight, 'kg', true, null)}</tr>`;
+    resultHtml += `<tr><td>脂肪量</td>${cell(cur.fatMass, 'kg', true, prev.fatMass)}${cell(prev.fatMass, 'kg', true, null)}</tr>`;
+    resultHtml += `<tr><td>肌肉量</td>${cell(cur.muscleMass, 'kg', false, prev.muscleMass)}${cell(prev.muscleMass, 'kg', false, null)}</tr>`;
+    resultHtml += `<tr><td>体脂率</td>${cell(cur.bodyFat, '', true, prev.bodyFat)}${cell(prev.bodyFat, '', true, null)}</tr>`;
+    resultHtml += `<tr><td>肌肉率</td>${cell(cur.muscle, '', false, prev.muscle)}${cell(prev.muscle, '', false, null)}</tr>`;
+    if (phiC != null) {
+      resultHtml += `<tr><td>瘦体重占比 φ</td>${cell(phiC, '%', true, phiP)}${cell(phiP, '%', true, null)}</tr>`;
+    }
+    resultHtml += `</tbody></table>`;
+    const rate = -cur.weight / 2;   // kg/周
+    let rateTxt, rateColor;
+    if (rate > 0.87) { rateTxt = '过快,肌肉流失加速(红线 0.87kg/周)'; rateColor = RED; }
+    else if (rate >= 0.5) { rateTxt = '正常节奏'; rateColor = GREEN; }
+    else { rateTxt = '波动范围内 / 停滞'; rateColor = 'var(--muted)'; }
+    resultHtml += `<div style="margin-top:8px;font-size:13px;line-height:1.8">本期体重 <b>${cur.weight > 0 ? '+' : ''}${fmt(cur.weight)}kg</b>(约 ${fmt(rate)}kg/周,<span style="color:${rateColor}">${rateTxt}</span>) · 脂肪 <b>${cur.fatMass > 0 ? '+' : ''}${fmt(cur.fatMass)}kg</b> · 肌肉 <b>${cur.muscleMass > 0 ? '+' : ''}${fmt(cur.muscleMass)}kg</b>${phiC != null ? ` · φ=<b>${Math.round(phiC)}%</b>` : ''}</div>`;
   } else {
-    html += `<tr><td colspan="5" class="empty">数据不足 14 天</td></tr>`;
+    resultHtml += `<div class="empty">数据不足 14 天</div>`;
   }
-  html += `</tbody></table>`;
-  html += `<table style="margin-top:14px"><thead><tr><th>行为(近14天)</th><th>均值</th><th>达标</th><th>达标率</th><th>状态</th></tr></thead><tbody>`;
-  for (const b of behavior) {
-    const m = METRICS[b.key];
-    const status = b.rate == null ? '—' : b.rate >= 0.7 ? '<span class="delta good">✓ 达标</span>' : `<span class="delta bad">⚠ 重点关注</span>`;
-    html += `<tr><td>${m.label}</td><td class="num">${b.avg == null ? '—' : fmt(b.avg)}</td>
-      <td class="num">${b.n ? `${b.hit}/${b.n}` : '—'}</td><td class="num">${b.rate == null ? '—' : Math.round(b.rate * 100) + '%'}</td><td>${status}</td></tr>`;
-  }
-  html += `</tbody></table>`;
-  document.getElementById('reviewAuto').innerHTML = html;
 
+  /* ④ 饮食 / 活动 / 睡眠 三张达标表 */
+  const groupTable = (keys) => {
+    let html = `<table><thead><tr><th>行为</th><th>均值</th><th>达标率</th><th>上期</th><th>状态</th></tr></thead><tbody>`;
+    keys.forEach(key => {
+      const b = behavior[Object.keys(stds).indexOf(key)];
+      const m = METRICS[key];
+      if (!m) return;
+      const status = b.rate == null ? '—' : b.rate >= 0.7 ? '<span class="delta good">✓ 达标</span>' : '<span class="delta bad">⚠ 重点关注</span>';
+      const trend = (b.rate != null && b.prevRate != null)
+        ? ` <span style="color:var(--muted);font-size:11px">(${b.rate >= b.prevRate ? '改善' : '恶化'} ${Math.round(b.prevRate * 100)}%)</span>` : '';
+      html += `<tr><td>${m.label}</td><td class="num">${b.avg == null ? '—' : fmt(b.avg)}</td><td class="num">${b.rate == null ? '—' : Math.round(b.rate * 100) + '%'}</td><td class="num">${b.prevRate == null ? '—' : Math.round(b.prevRate * 100) + '%'}</td><td>${status}${trend}</td></tr>`;
+    });
+    return html + '</tbody></table>';
+  };
+  const dietHtml = groupTable(['dietaryKcal', 'dietaryProtein', 'dietaryCarbs', 'dietaryFat']);
+  const activityHtml = groupTable(['activeEnergy', 'sleepHours']);
+  // 动态 hint:把 config 标准值写进卡片副标题
+  const dietHint = document.getElementById('hint-diet');
+  if (dietHint) {
+    dietHint.textContent = `饮食四项达标率(近14天 vs 上期) · 标准:热量 ≤${stds.dietaryKcal ? stds.dietaryKcal.value : '—'} / 蛋白 ≥${stds.dietaryProtein ? stds.dietaryProtein.value : '—'} / 碳水 ≤${stds.dietaryCarbs ? stds.dietaryCarbs.value : '—'} / 脂肪 ≤${stds.dietaryFat ? stds.dietaryFat.value : '—'}`;
+  }
+  const actHint = document.getElementById('hint-activity');
+  if (actHint) {
+    actHint.textContent = `活动量与睡眠(近14天 vs 上期) · 标准:活动 ≥${stds.activeEnergy ? stds.activeEnergy.value : '—'} / 睡眠 ≥${stds.sleepHours ? stds.sleepHours.value : '—'}`;
+  }
+
+  /* ⑤ 训练覆盖热力图:近14天各肌群组数,按周分栏 */
+  const [lo, hi] = training && training.target ? [training.target.setsPerMusclePerWeek.min, training.target.setsPerMusclePerWeek.max] : [4, 6];
+  const MAJOR = ['胸', '背', '肩', '腿', '臀'];
+  const tlog = (trainLog || []).filter(r => r.date >= FROM && r.date <= TO);
+  const setsIn = (a, b) => {
+    const acc = {};
+    tlog.filter(r => r.date >= a && r.date <= b).forEach(r => {
+      (r.items || []).forEach(i => {
+        const g = muscleOf(i.name);
+        acc[g] = (acc[g] || 0) + (i.sets || 0);
+      });
+    });
+    return acc;
+  };
+  const w1 = setsIn(FROM, d(7)), w2 = setsIn(d(6), TO);
+  const wkCell = (n) => {
+    if (!n) return '<td style="background:#f4f4f5;color:#9aa0a6;text-align:center;white-space:nowrap">未练</td>';
+    const ok = n >= lo;
+    return `<td style="background:${ok ? GREEN : '#e08c2f'};color:${ok ? '#fff' : '#5a3d00'};text-align:center;font-weight:700;white-space:nowrap">${n} 组</td>`;
+  };
+  let trainHtml = `<div style="font-size:12px;color:var(--muted);margin-bottom:6px">近 14 天 ${tlog.length} 次训练 · 大肌群每周期望 ${lo}-${hi} 组</div>`;
+  trainHtml += `<table style="border-collapse:separate;border-spacing:4px 0"><thead><tr><th>肌群</th><th>第 1 周<br><small>${FROM.slice(5)} ~ ${d(7).slice(5)}</small></th><th>第 2 周<br><small>${d(6).slice(5)} ~ ${TO.slice(5)}</small></th><th style="text-align:left">合计 / 判定</th></tr></thead><tbody>`;
+  MAJOR.forEach(g => {
+    const n1 = w1[g] || 0, n2 = w2[g] || 0, total = n1 + n2;
+    let verdict, vcolor;
+    if (!total) { verdict = '未训练'; vcolor = '#9aa0a6'; }
+    else if (total < lo) { verdict = `不足 ${total} 组 · 差 ${lo - total}`; vcolor = '#e08c2f'; }
+    else if (total > hi) { verdict = `达标 ${total} 组 · 偏多`; vcolor = 'var(--muted)'; }
+    else { verdict = `达标 ${total} 组`; vcolor = GREEN; }
+    trainHtml += `<tr><td><b>${g}</b></td>${wkCell(n1)}${wkCell(n2)}<td style="color:${vcolor};white-space:nowrap">${verdict}</td></tr>`;
+  });
+  const AUX = ['三头', '二头', '小腿', '核心', '下背', '其他'];
+  const auxList = AUX.filter(g => (w1[g] || 0) + (w2[g] || 0) > 0);
+  if (auxList.length) {
+    trainHtml += `<tr><td style="color:var(--muted)">辅助肌群</td><td style="background:#f4f4f5;color:var(--muted);text-align:center;font-size:12px" colspan="2">${auxList.map(g => g + ' ' + ((w1[g] || 0) + (w2[g] || 0)) + '组').join(' · ')}</td><td style="color:var(--muted);font-size:12px;white-space:nowrap">随复合动作连带刺激,不单独计数</td></tr>`;
+  }
+  trainHtml += `</tbody></table>`;
+  if (tlog.length) {
+    trainHtml += `<div style="font-size:12px;color:var(--muted);margin-top:6px">打卡明细:${tlog.slice().sort((a, b) => a.date < b.date ? 1 : -1).map(r => r.date.slice(5) + ' ' + r.items.map(i => i.name + (i.sets > 1 ? '×' + i.sets : '')).join('、')).join(' · ')}</div>`;
+  }
+
+  /* ⑥ 自动建议(排序:训练缺口 → 饮食达标 → 数据质量 → 身体分析) */
+  const advices = [];
+  const dietDays = Object.keys(daily).filter(dt => dt >= FROM && dt <= TO && daily[dt].dietaryKcal != null).length;
+  if (!tlog.length) advices.push(`本期 0 次训练:承诺线以 12/14 启动训练为前提,不启动则 3/31 无法达标 —— 先完成 1 次(周三·腿 或 周五·拉)`);
+  const missing = MAJOR.filter(g => (w1[g] || 0) + (w2[g] || 0) === 0);
+  if (missing.length) advices.push(`近 14 天未训练:${missing.join('、')} —— 下期各补 ≥${lo} 组(每次间隔 ≥48h,缺了不顺延)`);
+  const low = MAJOR.filter(g => { const n = (w1[g] || 0) + (w2[g] || 0); return n > 0 && n < lo; });
+  if (low.length) advices.push(`训练量不足:${low.map(g => g + ' 仅 ' + ((w1[g] || 0) + (w2[g] || 0)) + '组').join('、')} 未达 ${lo} 组下限 —— 减脂期低于 4 组等于没练`);
+  const dietBad = behavior.filter(b => ['dietaryKcal', 'dietaryProtein', 'dietaryCarbs', 'dietaryFat'].indexOf(b.key) >= 0 && b.rate != null && b.rate < 0.7)
+    .sort((a, b) => a.rate - b.rate);
+  if (dietBad.length) {
+    const top = dietBad[0];
+    const m = METRICS[top.key], s = stds[top.key];
+    const dir = top.key === 'dietaryKcal' || top.key === 'dietaryFat' ? '≤' : '≥';
+    const unit = top.key.indexOf('Kcal') >= 0 ? 'kcal' : 'g';
+    advices.push(`饮食第一重点:${m.label} 达标率仅 ${Math.round(top.rate * 100)}%(均值 ${fmt(top.avg)}${unit},目标 ${dir}${fmt(s.value)})${top.n < 14 ? `,仅 ${top.n}/14 天有记录` : ''}`);
+  }
+  if (dietDays < 10) advices.push(`饮食记录只有 ${dietDays}/14 天有数据,达标率仅供参考 —— 恢复零缺天比任何行为都优先(数据门槛)`);
+  const bAct = behavior.find(b => b.key === 'activeEnergy'), bSleep = behavior.find(b => b.key === 'sleepHours');
+  if (bAct && bAct.rate != null && bAct.rate < 0.7) {
+    advices.push(`活动量达标率 ${Math.round(bAct.rate * 100)}%(均值 ${fmt(bAct.avg)}kcal,目标 ≥${stds.activeEnergy.value}) —— 差 ${stds.activeEnergy.value - bAct.avg}kcal/天,NEAT 或训练后加一组`);
+  }
+  if (bSleep && bSleep.rate != null && bSleep.rate < 0.7) {
+    advices.push(`睡眠达标率 ${Math.round(bSleep.rate * 100)}%(均值 ${fmt(bSleep.avg)}h,目标 ≥${stds.sleepHours.value}h) —— 睡不够会压低恢复与代谢,先保 23:30 前放下手机`);
+  }
+  if (cur && cur.weight > 0.3) {
+    advices.push(`本期体重不降反升 ${fmt(cur.weight)}kg —— 先查缺口:训练 ${tlog.length} 次 + 饮食记录 ${dietDays}/14 天,「记录缺 + 训练 0」时数据不可信`);
+  }
+  if (phiC != null && phiC > 30) {
+    advices.push(`本期 φ=${Math.round(phiC)}% 高于 B 档(25%):掉的体重里近 1/3 是肌肉 —— 训练 + 蛋白双管齐下,4 周后再看 φ`);
+  }
+  const rate = cur ? -cur.weight / 2 : null;
+  if (rate != null && rate > 0.87) advices.push(`减重速率 ${fmt(rate)}kg/周 超过红线(0.87):肌肉流失加速 —— 缺口降到 450kcal/天以内`);
+  let adviceHtml = `<p style="font-size:12px;color:var(--muted);margin:0 0 8px">前 2 条为下期重点(可检验);完整结论与历史见左侧「Review 期次」</p><ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9">`;
+  if (!advices.length) adviceHtml += `<li>本期无异常:结果与行为均在轨,继续执行承诺线</li>`;
+  advices.forEach((a, i) => {
+    const badge = i < 2 ? `<span style="color:#fff;background:${i === 0 ? RED : '#e08c2f'};border-radius:999px;font-size:11px;padding:2px 8px;margin-right:6px">重点 ${i + 1}</span>` : '';
+    adviceHtml += `<li style="margin-bottom:4px">${badge}${a}</li>`;
+  });
+  adviceHtml += '</ul>';
+
+  document.getElementById('reviewResult').innerHTML = resultHtml;
+  document.getElementById('reviewDiet').innerHTML = dietHtml;
+  document.getElementById('reviewActivity').innerHTML = activityHtml;
+  document.getElementById('reviewTraining').innerHTML = trainHtml;
+  document.getElementById('reviewAdvice').innerHTML = adviceHtml;
   // 历史结论:左侧期次列表 + 右侧详情
   loadJSON('data/reviews.json').then(reviews => {
     const listEl = document.getElementById('reviewList');
@@ -1214,7 +1382,7 @@ function renderReview(rows, daily, goals) {
         step('bar-' + key, () => renderPlainBarChart(m, s));   // 统一走标准线渲染(无 standard 时纯柱)
       }
       step('macro', () => renderMacroChart(daily));
-      step('review', () => renderReview(rows, daily, goals));
+      step('review', () => renderReview(rows, daily, goals, trainLog, training));
     } else {
       document.getElementById('updated').textContent = '图表库未加载(网络受限),表格数据不受影响';
     }
