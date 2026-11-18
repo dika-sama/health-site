@@ -321,6 +321,9 @@ const METRICS = {
   // 占比指标由绝对量现场计算: 体脂率=fatMass/weight, 肌肉率=muscleMass/weight (不再直接记录)
   // 以下维度的 standard/yMin/yMax/overColor 全部由 CFG.standards 注入
   // (overColor 现仅用于 Review 页达标方向判定,不再用于柱状图着色)
+  // 派生指标(不直接落库):热量缺口 = 基础代谢(basalEnergy) + 活动消耗(activeEnergy) − 摄入热量(dietaryKcal),三项齐全才计算
+  // 标准线 500 = 单线目标模型的缺口假设(2026-11-18 定版,缺口 500kcal/天+φ28% → 3/31 75.4kg/体脂20.2%)
+  calorieGap:     { label: '热量缺口 (kcal)', color: '#2fa46b', chart: 'chart-calorieGap', bar: true, standard: 500, standardLabel: '目标缺口 500', yMax: 1500 },
   activeEnergy:   { label: '活动消耗 (kcal)', color: '#e08c2f', chart: 'chart-activeEnergy',   bar: true },
   dietaryKcal:    { label: '热量 (kcal)',     color: '#f0c419', chart: 'chart-dietaryKcal',    bar: true },
   dietaryProtein: { label: '蛋白质 (g)',      color: '#f0c419', chart: 'chart-dietaryProtein', bar: true },
@@ -546,9 +549,9 @@ function renderPlainBarChart(m, seriesRaw) {
       borderRadius: 3, barPercentage: 0.8, categoryPercentage: 0.9 },
   ];
   if (m.standard != null) {
-    // 标准线:灰色虚线横贯整个时间轴(轴首 → 轴尾),仅作参考,不做超出着色
+    // 标准线:灰色虚线横贯整个时间轴(轴首 → 轴尾),仅作参考,不做超出着色;标签可用 standardLabel 自定义(如「目标缺口 500」)
     datasets.push({
-      label: '标准', type: 'line',
+      label: m.standardLabel || '标准', type: 'line', isStd: true,
       data: [{ x: axMin(), y: m.standard }, { x: axMax(), y: m.standard }],
       borderColor: '#9aa0a699', borderDash: [6, 6], borderWidth: 1.5,
       pointRadius: 0, tension: 0, fill: false,
@@ -568,6 +571,7 @@ function renderPlainBarChart(m, seriesRaw) {
           title: (items) => (items[0] && items[0].parsed && items[0].parsed.x != null)
             ? new Date(items[0].parsed.x).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
             : '',
+          filter: (item) => !item.dataset.isStd,
           label: (item) => {
             const total = totalLookup[dayKey(new Date(item.parsed.x))];
             return total == null ? '' : `${m.label}: ${fmt(total)}`;
@@ -584,7 +588,7 @@ function renderPlainBarChart(m, seriesRaw) {
       parsing: { xAxisKey: 'x', yAxisKey: 'y' },
       scales: {
         x: { type: 'time', min: axMin(), max: axMax(), offset: false, time: { unit: 'week', displayFormats: { week: 'M/d' } } },
-        y: { min: 0, max: m.yMax, afterFit: (sc) => { sc.width = 46; } },
+        y: { min: m.yMin != null ? m.yMin : 0, max: m.yMax, afterFit: (sc) => { sc.width = 46; } },
       },
       ...tooltipCfg,
     },
@@ -822,6 +826,7 @@ document.querySelectorAll('.page-tab').forEach(btn => btn.onclick = () => {
 function metricHint(key, goals) {
   const gs = (goals || []).filter(g => g.metric === key);
   const m = METRICS[key];
+  if (key === 'calorieGap') return '目标缺口 500 kcal/天(单线模型:训练+蛋白+φ28%);缺口 = 基础代谢 + 活动消耗 − 摄入热量';
   if (gs.length) {
     const fmtDate = (d) => { const [, mm, dd] = d.split('-'); return `${+mm}/${+dd}`; };
     if (gs.length === 1) {
@@ -844,8 +849,9 @@ function metricHint(key, goals) {
 }
 
 function buildChartRows(goals) {
-  const order = ['weight', 'bodyFat', 'fatMass', 'muscleMass', 'activeEnergy', 'dietaryKcal', 'dietaryProtein', 'dietaryCarbs', 'dietaryFat', 'sleepHours'];
-  const emoji = { weight: '⚖️', bodyFat: '🫀', fatMass: '📉', muscleMass: '💪', activeEnergy: '🏃', dietaryKcal: '🔥', dietaryProtein: '🥩', dietaryCarbs: '🍚', dietaryFat: '🧈', sleepHours: '😴' };
+  // 汇总页图表顺序(2026-11-18 定版):身体成分 → 热量缺口(能量平衡结果,配 500 参考线) → 饮食细节 → 活动消耗/热量原始两项移列尾
+  const order = ['weight', 'bodyFat', 'fatMass', 'muscleMass', 'calorieGap', 'dietaryProtein', 'dietaryCarbs', 'dietaryFat', 'sleepHours', 'activeEnergy', 'dietaryKcal'];
+  const emoji = { weight: '⚖️', bodyFat: '🫀', fatMass: '📉', muscleMass: '💪', calorieGap: '🔥', dietaryProtein: '🥩', dietaryCarbs: '🍚', dietaryFat: '🧈', sleepHours: '😴', activeEnergy: '🏃', dietaryKcal: '🍽️' };
   const el = document.getElementById('chartRows');
   el.innerHTML = order.map(key => {
     const m = METRICS[key];
@@ -1217,6 +1223,11 @@ function renderReview(rows, daily, goals, trainLog, training) {
     try { daily = await loadJSON('data/daily_summary.json'); } catch (e) {}
     let trainLog = [];   // 训练打卡(汇总页状态行/表格页训练列/训练页记录卡共用)
     try { trainLog = await loadJSON('data/training_log.json'); } catch (e) {}
+    // 行为维度序列(直取日汇总字段)与热量缺口序列(派生:基础代谢+活动消耗−摄入热量,三项齐全才画点)
+    const sortedDays = () => Object.entries(daily).sort(([a], [b]) => a < b ? -1 : 1);
+    const barSeriesOf = (key) => sortedDays().map(([date, v]) => ({ x: date, y: v[key] != null ? v[key] : null }));
+    const gapSeriesOf = () => sortedDays().map(([date, v]) => ({ x: date, y: (v.basalEnergy != null && v.activeEnergy != null && v.dietaryKcal != null)
+      ? Math.round(v.basalEnergy + v.activeEnergy - v.dietaryKcal) : null }));
 
     const todayStr0 = new Date();
     const tStr = todayStr0.getFullYear() + '-' + String(todayStr0.getMonth() + 1).padStart(2, '0') + '-' + String(todayStr0.getDate()).padStart(2, '0');
@@ -1230,10 +1241,9 @@ function renderReview(rows, daily, goals, trainLog, training) {
       for (const key of ['activeEnergy', 'dietaryKcal', 'dietaryProtein', 'dietaryCarbs', 'dietaryFat', 'sleepHours']) {
         const m = METRICS[key];
         if (!m || !m.chart) continue;
-        const series = Object.entries(daily).sort(([a], [b]) => a < b ? -1 : 1)
-          .map(([date, v]) => ({ x: date, y: v[key] != null ? v[key] : null }));
-        renderPlainBarChart(m, series);
+        renderPlainBarChart(m, barSeriesOf(key));
       }
+      if (METRICS.calorieGap && hasChart) renderPlainBarChart(METRICS.calorieGap, gapSeriesOf());
       renderMacroChart(daily);
       renderTrainingChart(trainLog);   // 训练散点图同样随月份视图过滤
     };
@@ -1247,11 +1257,10 @@ function renderReview(rows, daily, goals, trainLog, training) {
       for (const key of ['activeEnergy', 'dietaryKcal', 'dietaryProtein', 'dietaryCarbs', 'dietaryFat', 'sleepHours']) {
         const m = METRICS[key];
         if (!m || !m.chart) continue;
-        const series = Object.entries(daily).sort(([a], [b]) => a < b ? -1 : 1)
-          .map(([date, v]) => ({ x: date, y: v[key] != null ? v[key] : null }));
-        const s = series;   // 闭包捕获
+        const s = barSeriesOf(key);
         step('bar-' + key, () => renderPlainBarChart(m, s));   // 统一走标准线渲染(无 standard 时纯柱)
       }
+      step('bar-calorieGap', () => renderPlainBarChart(METRICS.calorieGap, gapSeriesOf()));   // 热量缺口(派生序列)
       step('macro', () => renderMacroChart(daily));
       step('review', () => renderReview(rows, daily, goals, trainLog, training));
     } else {
