@@ -402,18 +402,12 @@ function renderStats(rowsRaw, trainLogToday) {
   }
 }
 
-/* ---------- 目标趋势线 ----------
-// 行为分档模型(2026-11-16 定版):锚点=10/18 基数(89.3/25.0/60.8,其他3.5),线从 10/18 画到 2027-03-31,便于回顾已发生阶段。
-// A/B/C 三线=三种行为若永远保持的走向(虚线,均按 600kcal/天缺口满执行外推+体重^0.75适应):
-//   A(both)  每周3次抗阻+蛋白达标  phi=15%,3/31端点75.6kg/体脂17.7%
-//   B(protein) 无抗阻+蛋白达标      phi=25%,3/31端点74.3kg/体脂18.5%
-//   C(starve)  蛋白不达标(饿瘦)      phi=40%,3/31端点71.8kg/体脂20.2%
-//   D(deficit) 缺口未满~350         phi=35%,3/31端点78.9kg/体脂23.1%——缺口差 250kcal/天,
-//     135 天少掉约 10kg;这不是第四档行为,而是「缺口没吃够+没练够」的状态代价
-// 承诺线(committed)=分段折线,反映行为会变的现实:10/18→11/16已发生(φ32%/兑现66%,复现实测)→11/16→12/14现状→12/14→1/11转A适应→1/11→3/31稳定A。
-// 承诺线 3/31 端点 77.7kg/体脂20.9%,75kg 约 2027-05-17;数据在 goals.json scenarios.committed.phases(每段一个终点,前端段间线性插值)。
-// 核心机制:瘦组织能量密度 ~1500 kcal/kg,脂肪 7700 kcal/kg;三种行为每周烧的脂肪几乎相同(0.53/0.51/0.48),差的全在肌肉。
-// 体脂率线:承诺线与 A/B/C/D 都用「当天脂肪/当天体重」逐点导出(凸形);「参考(非目标)」指标不画达成率。
+/* ---------- 目标趋势线(单线版,2026-11-18 定版) ----------
+// 2026-11-18 起简化:只保留一条目标线,删除 A/B/C/D 多情景线与承诺线。
+// 单线定义:训练+蛋白(φ~25%)+450-600kcal/天缺口,锚点=最新实测,线性外推到 end。
+// 体重/脂肪/肌肉各自一条线;体脂率=当天脂肪/当天体重逐点导出(凸形),「参考(非目标)」标签时照画线但不显示达成率。
+// 目标体重 75kg + 体脂 22%(2027-03-31):5 个月+抗阻训练的正常可达上限,非 18%(多年训练结果)。
+// 线随双周 Review 用最新实测重锚(goals.json 的 from/start 更新即可,前端不用改)。
  */
 function goalDataset(g, goals) {
   const start = new Date(g.start + 'T00:00:00'), end = new Date(g.end + 'T00:00:00');
@@ -428,138 +422,35 @@ function goalDataset(g, goals) {
     pts.push({ x: end, y: to });
     return pts;
   };
-  // 承诺线:分段插值(段内线性,段间转折;体重/脂肪/肌肉各自按相位走)
-  const mkPhases = (phases, key) => {
-    const pts = [];
-    phases.forEach((ph, k) => {
-      const a = new Date(ph.start + 'T00:00:00'), b = new Date(ph.end + 'T00:00:00');
-      const prevV = k === 0 ? g.from : phases[k - 1][key];
-      const v0 = prevV, v1 = ph[key];
-      const span = (b - a) / 86400e3;
-      for (let t = a.getTime(); t < b.getTime(); t += 3 * 86400e3) {
-        const n = (t - a.getTime()) / 86400e3;
-        pts.push({ x: new Date(t), y: v0 + (v1 - v0) * (n / span) });
-      }
-      pts.push({ x: b, y: v1 });
-    });
-    return pts;
-  };
 
   const lines = [];
-  if (g.scenarios) {
-    // 标签后缀标缺口假设:.·600=满执行,·350=当前实测缺口;D=缺口未满线
-    const sc = [
-      ['both', 'A·3次抗阻+蛋白·600', GREEN + 'aa', 2],
-      ['protein', 'B·无抗阻+蛋白·600', '#e08c2f' + 'cc', 1.5],
-      ['starve', 'C·蛋白不足·600', RED + '88', 1.5],
-      ['deficit', 'D·缺口未满~350', '#9b59b6' + 'cc', 1.5],
-    ];
-    // 体脂率 = 派生指标:每个点 = 当天脂肪情形值 / 当天体重情形值 x 100(两条线性线的比值,全程凸形)
-    // 不能自己当独立线性线——那会让「78 快照」错用到 78 之后
-    if (g.metric === 'bodyFat' && goals) {
-      const wg = goals.find(x => x.metric === 'weight');
-      const fg = goals.find(x => x.metric === 'fatMass');
-      if (wg && fg && wg.scenarios && fg.scenarios) {
-        // 承诺线:体脂 = 分段脂肪 / 分段体重
-        const scCommit = wg.scenarios.committed;
-        if (scCommit && scCommit.phases) {
-          const pts = [];
-          scCommit.phases.forEach((ph, k) => {
-            const a = new Date(ph.start + 'T00:00:00'), b = new Date(ph.end + 'T00:00:00');
-            const p0 = k === 0 ? wg.from : scCommit.phases[k - 1].weight;
-            const f0 = k === 0 ? fg.from : scCommit.phases[k - 1].fat;
-            const w1 = ph.weight, f1 = ph.fat;
-            const span = (b - a) / 86400e3;
-            for (let t = a.getTime(); t < b.getTime(); t += 3 * 86400e3) {
-              const n = (t - a.getTime()) / 86400e3;
-              const wv = p0 + (w1 - p0) * (n / span);
-              const fv = f0 + (f1 - f0) * (n / span);
-              pts.push({ x: new Date(t), y: fv / wv * 100 });
-            }
-            pts.push({ x: b, y: f1 / w1 * 100 });
-          });
-          lines.push({
-            label: '承诺线(行为切换)',
-            data: pts,
-            borderColor: '#2f7cf6',
-            borderWidth: 2.5,
-            pointRadius: 0,
-            tension: 0,
-            fill: false,
-          });
-        }
-        sc.forEach(([key, label, color, w]) => {
-          const sw = wg.scenarios[key], sf = fg.scenarios[key];
-          if (!sw || !sf || sw.to == null || sf.to == null) return;
-          const pts = [];
-          for (let t = start.getTime(); t <= end.getTime(); t += 3 * 86400e3) {
-            const n = (t - start.getTime()) / 86400e3;
-            const wv = wg.from + (sw.to - wg.from) * (n / N);
-            const fv = fg.from + (sf.to - fg.from) * (n / N);
-            pts.push({ x: new Date(t), y: fv / wv * 100 });
-          }
-          const wvE = sw.to, fvE = sf.to;
-          pts.push({ x: end, y: fvE / wvE * 100 });
-          lines.push({
-            label: label + ' ' + fmt(fvE / wvE * 100) + '@3/31',
-            data: pts,
-            borderColor: color,
-            borderDash: [3, 5],
-            borderWidth: w,
-            pointRadius: 0,
-            tension: 0,
-            fill: false,
-          });
-        });
-        // 18% 目标线:水平参考线(18=75kg 时的 A 线参考,不是 3/31 状态)
-        if (g.to != null) {
-          const ref = [{ x: start, y: g.to }, { x: end, y: g.to }];
-          lines.push({
-            label: '目标 ' + fmt(g.to) + ' @75kg',
-            data: ref,
-            borderColor: METRICS[g.metric].color + 'aa',
-            borderDash: [8, 4],
-            borderWidth: 1.5,
-            pointRadius: 0,
-            tension: 0,
-            fill: false,
-          });
-        }
-        return lines;
+  // 体脂率 = 派生指标:每个点 = 当天脂肪线性插值值 / 当天体重线性插值值 x 100(全程凸形)
+  if (g.metric === 'bodyFat' && goals) {
+    const wg = goals.find(x => x.metric === 'weight');
+    const fg = goals.find(x => x.metric === 'fatMass');
+    if (wg && fg && wg.to != null && fg.to != null) {
+      const pts = [];
+      for (let t = start.getTime(); t <= end.getTime(); t += 3 * 86400e3) {
+        const n = (t - start.getTime()) / 86400e3;
+        const wv = wg.from + (wg.to - wg.from) * (n / N);
+        const fv = fg.from + (fg.to - fg.from) * (n / N);
+        pts.push({ x: new Date(t), y: fv / wv * 100 });
       }
-    }
-    sc.forEach(([key, label, color, w]) => {
-      const s = g.scenarios[key];
-      if (!s || s.to == null) return;
+      pts.push({ x: end, y: fg.to / wg.to * 100 });
       lines.push({
-        label: label + ' ' + fmt(s.to),
-        data: mkPts(g.from, s.to),
-        borderColor: color,
-        borderDash: [3, 5],
-        borderWidth: w,
-        pointRadius: 0,
-        tension: 0,
-        fill: false,
-      });
-    });
-    // 承诺线(分段):体重/脂肪/肌肉各自按 phases 插值
-    const commit = g.scenarios.committed;
-    if (commit && commit.phases && commit.phases.length) {
-      const keyMap = { weight: 'weight', fatMass: 'fat', muscleMass: 'muscle' };
-      const pts = mkPhases(commit.phases, keyMap[g.metric] || 'weight');
-      const last = commit.phases[commit.phases.length - 1];
-      const endV = last[keyMap[g.metric] || 'weight'];
-      lines.push({
-        label: '承诺线 ' + fmt(endV),
+        label: '目标线 ' + fmt(fg.to / wg.to * 100),
         data: pts,
-        borderColor: '#2f7cf6',
-        borderWidth: 2.5,
+        borderColor: METRICS[g.metric].color + '88',
+        borderDash: [6, 6],
+        borderWidth: 2,
         pointRadius: 0,
         tension: 0,
         fill: false,
       });
+      return lines;
     }
-  } else if (g.to != null) {
+  }
+  if (g.to != null) {
     lines.push({
       label: '目标线 ' + fmt(g.to),
       data: mkPts(g.from, g.to),
@@ -938,27 +829,12 @@ function metricHint(key, goals) {
   const gs = (goals || []).filter(g => g.metric === key);
   const m = METRICS[key];
   if (gs.length) {
-    // 多段目标:第一段写完整起止,后续段只写「→ 终值(日期)」;日期统一 M/D
     const fmtDate = (d) => { const [, mm, dd] = d.split('-'); return `${+mm}/${+dd}`; };
     if (gs.length === 1) {
       const g = gs[0];
-      // 体脂率等「参考,非目标」指标:不写「目标」,标为参考区间
       const isRef = (g.label || '').indexOf('参考') >= 0;
-      // 承诺线:当前行为的分段外推,给出承诺线终点 + 到达说明
-      const commit = g.scenarios && g.scenarios.committed;
-      const commitEnd = commit && commit.phases && commit.phases[commit.phases.length - 1];
       if (isRef) {
-        // to = 75kg 时的参考值(非 3/31 状态);承诺线给出 3/31 的现实预期
-        const cVal = commitEnd ? fmt(commitEnd.fat / commitEnd.weight * 100) : '—';
-        return `参考(非目标) ${fmt(g.from)} → ${fmt(g.to)} = 75kg 时水准 · 3/31 承诺线 ${cVal}`;
-      }
-      if (commitEnd) {
-        const keyMap = { weight: 'weight', fatMass: 'fat', muscleMass: 'muscle' };
-        const k = keyMap[g.metric] || 'weight';
-        const endV = commitEnd[k];
-        let s = `目标 ${fmt(g.from)} → ${fmt(g.to)}（${fmtDate(g.end)}） · 承诺线 ${fmt(endV)}（${fmtDate(commitEnd.end)}）`;
-        if (g.metric === 'weight') s += ' · A/B/C=600缺口 · D=实测350缺口';
-        return s;
+        return `参考(非目标) ${fmt(g.from)} → ${fmt(g.to)}（${fmtDate(g.end)}）`;
       }
       if (g.from === g.to) return `目标 ${g.direction === 'maintain' ? '≥' : ''} ${fmt(g.to)} 维持（${fmtDate(g.end)}）`;
       return `目标 ${fmt(g.from)} → ${fmt(g.to)}（${fmtDate(g.end)}）`;
@@ -1246,7 +1122,7 @@ function renderReview(rows, daily, goals, trainLog, training) {
   /* ⑥ 自动建议(排序:训练缺口 → 饮食达标 → 数据质量 → 身体分析) */
   const advices = [];
   const dietDays = Object.keys(daily).filter(dt => dt >= FROM && dt <= TO && daily[dt].dietaryKcal != null).length;
-  if (!tlog.length) advices.push(`本期 0 次训练:承诺线以 12/14 启动训练为前提,不启动则 3/31 无法达标 —— 先完成 1 次(周三·腿 或 周五·拉)`);
+  if (!tlog.length) advices.push(`本期 0 次训练:目标线以 3次/周训练+450-600缺口/天 为前提,不启动则 3/31 无法达标 —— 先完成 1 次(周三·腿 或 周五·拉)`);
   const missing = MAJOR.filter(g => (w1[g] || 0) + (w2[g] || 0) === 0);
   if (missing.length) advices.push(`近 14 天未训练:${missing.join('、')} —— 下期各补 ≥${lo} 组(每次间隔 ≥48h,缺了不顺延)`);
   const low = MAJOR.filter(g => { const n = (w1[g] || 0) + (w2[g] || 0); return n > 0 && n < lo; });
@@ -1277,7 +1153,7 @@ function renderReview(rows, daily, goals, trainLog, training) {
   const rate = cur ? -cur.weight / 2 : null;
   if (rate != null && rate > 0.87) advices.push(`减重速率 ${fmt(rate)}kg/周 超过红线(0.87):肌肉流失加速 —— 缺口降到 450kcal/天以内`);
   let adviceHtml = `<p style="font-size:12px;color:var(--muted);margin:0 0 8px">前 2 条为下期重点(可检验);完整结论与历史见左侧「Review 期次」</p><ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9">`;
-  if (!advices.length) adviceHtml += `<li>本期无异常:结果与行为均在轨,继续执行承诺线</li>`;
+  if (!advices.length) adviceHtml += `<li>本期无异常:结果与行为均在轨,继续执行目标线</li>`;
   advices.forEach((a, i) => {
     const badge = i < 2 ? `<span style="color:#fff;background:${i === 0 ? RED : '#e08c2f'};border-radius:999px;font-size:11px;padding:2px 8px;margin-right:6px">重点 ${i + 1}</span>` : '';
     adviceHtml += `<li style="margin-bottom:4px">${badge}${a}</li>`;
