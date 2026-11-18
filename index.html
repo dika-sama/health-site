@@ -665,9 +665,9 @@ function renderNotes(items) {
     listEl.querySelectorAll('.review-item').forEach(x => x.classList.toggle('active', x.dataset.id === n.id));
     document.getElementById('noteDetailTitle').textContent = `📖 ${n.title}`;
     document.getElementById('noteDetailMeta').textContent = `${n.date}${(n.tags && n.tags.length) ? ' · ' + n.tags.join(' / ') : ''}`;
-    // 渲染:文本段 + 表格段 + 列表段 + 内嵌图表段(图表定义在 n.charts)
+    // 渲染:文本段 + 表格段 + 列表段 + 内嵌图表段(图表定义在 n.charts);图表段也保留标题/正文/表格
     document.getElementById('noteDetailBody').innerHTML = n.body.map(sec => {
-      if (sec.chart) return `<div class="kb-chart"><canvas id="${sec.chart}"></canvas></div>`;
+      const chartHtml = sec.chart ? `<div class="kb-chart"><canvas id="${sec.chart}"></canvas></div>` : '';
       const listHtml = (sec.list && sec.list.length)
         ? `<ul class="kb-list">${sec.list.map(li => `<li>${li}</li>`).join('')}</ul>` : '';
       const tableHtml = sec.table
@@ -675,7 +675,7 @@ function renderNotes(items) {
             <thead><tr>${sec.table.headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
             <tbody>${sec.table.rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>
           </table></div>` : '';
-      return `<div class="kb-sec"><h3>${sec.h}</h3>${sec.p ? `<p>${sec.p}</p>` : ''}${listHtml}${tableHtml}${sec.p2 ? `<p style="margin-top:8px">${sec.p2}</p>` : ''}</div>`;
+      return `<div class="kb-sec"><h3>${sec.h}</h3>${sec.p ? `<p>${sec.p}</p>` : ''}${listHtml}${tableHtml}${sec.p2 ? `<p style="margin-top:8px">${sec.p2}</p>` : ''}${chartHtml}</div>`;
     }).join('');
     // 建图
     (n.charts || []).forEach(spec => {
@@ -699,7 +699,8 @@ function renderNotes(items) {
           scales: spec.scales || { y: { beginAtZero: true } },
           plugins: {
             legend: spec.legend === false ? { display: false } : { display: true, position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
-            tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${item.parsed[spec.horizontal ? 'x' : 'y']}%` } },
+            // 单位后缀:默认 %(比例图);kg 等其他单位的图传 spec.tooltipSuffix
+            tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${item.parsed[spec.horizontal ? 'x' : 'y']}${spec.tooltipSuffix != null ? spec.tooltipSuffix : '%'}` } },
           },
         },
       });
