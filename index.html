@@ -152,7 +152,7 @@
 
   <div class="page-tabs">
     <button class="page-tab active" data-page="home">汇总</button>
-    <button class="page-tab" data-page="body">身体数据</button>
+    <button class="page-tab" data-page="body">数据</button>
     <button class="page-tab" data-page="notes">知识库</button>
     <button class="page-tab" data-page="review">Review</button>
     <button class="page-tab" data-page="training">训练与饮食</button>
@@ -166,6 +166,12 @@
       <div class="stats" id="stats"></div>
       <div id="todayTrain" style="font-size:13px;padding:4px 2px 0"></div>
     </div>
+    <div class="card">
+      <h2>🏋️ 训练打卡(近14天)</h2>
+      <div class="hint">A推 / B腿 / C拉 三行 · 完成当天的训练日打对应色标;近7天次数见表下</div>
+      <div class="scroll"><table id="trainGrid"></table></div>
+      <div class="hint" id="trainGridSummary" style="margin:8px 0 0"></div>
+    </div>
     <div class="chart-rows" id="chartRows"><!-- 各图 hint 由 JS 按 goals/config 动态写入 --></div>
     <div class="chart-row" id="macroRow" style="display:none">
       <div class="row-head"><h2>🥗 供能比 (%)</h2><div class="hint" id="hint-macro">每日三大营养素供能占比,阴影 = 合理区间</div></div>
@@ -177,7 +183,7 @@
   <div class="page" id="page-body">
     <div class="card">
       <h2>📊 每日数据</h2>
-      <div class="hint">按天汇总:身体(手记)+ 活动(Apple 健康)+ 饮食(饮食记录)+ 训练(打卡);「训练」列 ●=推 🟠=腿 🔵=拉,空白=当天没练</div>
+      <div class="hint">按天汇总:身体(手记)+ 活动(Apple 健康)+ 饮食(饮食记录)+ 训练(打卡);「训练」列记录动作/组数明细与备注(色点=训练日:A推红/B腿橙/C拉蓝),空白=当天没练——Review 直接看这里的详细内容</div>
       <div class="scroll">
         <table id="bodyTable">
           <thead><tr>
@@ -394,8 +400,7 @@ function renderStats(rowsRaw, trainLogToday) {
   // 当天训练状态行:练了哪几块,三色块标识(与数据页「训练」列同源)
   const trainEl = document.getElementById('todayTrain');
   if (trainEl) {
-    const tag = trainLogToday ? trainTag(trainLogToday) : '';
-    const hitBlocks = order3.filter(g => tag.indexOf(TRAIN_COLORS[g]) >= 0);
+    const hitBlocks = trainLogToday ? order3.filter(g => trainBlocks(trainLogToday)[g]) : [];
     trainEl.innerHTML = hitBlocks.length
       ? `🏋️ 今日已练:<b>${hitBlocks.join(' + ')}</b> <span style="display:inline-flex;gap:4px;margin-left:6px;vertical-align:middle">${hitBlocks.map(g => `<span style="width:12px;height:12px;border-radius:3px;background:${TRAIN_COLORS[g]};display:inline-block"></span>`).join('')}</span>`
       : `🏋️ 今日还未记录训练`;
@@ -612,37 +617,77 @@ function renderPlainBarChart(m, seriesRaw) {
 
 /* ---------- 目标 chips(已并入指标卡,保留函数备查) ---------- */
 
+/* ---------- 汇总页:训练打卡网格(A推/B腿/C拉 三行 × 近14天) ---------- */
+function trainBlocks(items) {
+  const hit = {};
+  (items || []).forEach(i => order3.forEach(g => {
+    if (TRAIN_KEYS[g].some(k => String(i.name).indexOf(k) >= 0)) hit[g] = true;
+  }));
+  return hit;
+}
+const TRAIN_DAY_LABEL = { 推: 'A 推', 腿: 'B 腿', 拉: 'C 拉' };
+function renderTrainGrid(trainLog) {
+  const el = document.getElementById('trainGrid');
+  const sumEl = document.getElementById('trainGridSummary');
+  if (!el) return;
+  const byDate = {};
+  (trainLog || []).forEach(r => { byDate[r.date] = r; });
+  const d = new Date();
+  const dayKeys = (dd) => dd.getFullYear() + '-' + pad2(dd.getMonth() + 1) + '-' + pad2(dd.getDate());
+  const days = [];
+  for (let i = 13; i >= 0; i--) days.push(dayKeys(new Date(d.getFullYear(), d.getMonth(), d.getDate() - i)));
+  const fmtDay = (s) => s.slice(5).replace('-', '/');
+  const blocksOf = (s) => { const r = byDate[s]; return r ? trainBlocks(r.items) : {}; };
+  let html = `<thead><tr><th style="text-align:left">训练日</th>${days.map(s => `<th style="font-size:11px;font-weight:500;color:var(--muted)">${fmtDay(s)}</th>`).join('')}</tr></thead><tbody>`;
+  order3.forEach(g => {
+    html += `<tr><td style="white-space:nowrap"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${TRAIN_COLORS[g]};margin-right:6px;vertical-align:middle"></span>${TRAIN_DAY_LABEL[g]}</td>`;
+    html += days.map(s => {
+      const on = blocksOf(s)[g];
+      return `<td style="text-align:center"><span style="display:inline-block;width:16px;height:16px;border-radius:4px;background:${on ? TRAIN_COLORS[g] : 'var(--border)'}"></span></td>`;
+    }).join('');
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  el.innerHTML = html;
+  // 近7天次数汇总
+  if (sumEl) {
+    const week = days.slice(-7);
+    const counts = {};
+    order3.forEach(g => { counts[g] = 0; });
+    week.forEach(s => { order3.forEach(g => { if (blocksOf(s)[g]) counts[g]++; }); });
+    sumEl.innerHTML = `近7天: ${order3.map(g => `<b style="color:${TRAIN_COLORS[g]}">${TRAIN_DAY_LABEL[g]} ${counts[g]}</b>`).join(' · ')} 次(目标 3 次/周,每肌群 4-6 组)`;
+  }
+}
+
 /* ---------- 表格页:每日全量汇总(身体+活动+饮食+训练) ---------- */
+// 训练列明细:色点(训练日)+ 动作×组数 + 备注(便于后期 Review 直接看)
+function trainDetail(r) {
+  const parts = (r.items || []).map(i => `${i.name}${i.sets > 1 ? '×' + i.sets + '组' : ''}`);
+  const dot = order3.filter(g => trainBlocks(r.items)[g])
+    .map(g => `<span title="${TRAIN_DAY_LABEL[g]}" style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${TRAIN_COLORS[g]};margin-right:2px;vertical-align:middle"></span>`).join('');
+  return `<div>${dot}${parts.join(' · ') || '—'}${r.note ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">📝 ${r.note}</div>` : ''}</div>`;
+}
 // 训练块 → 颜色:推=红 腿=橙 拉=蓝;由动作名关键词判定
 const TRAIN_KEYS = {
   推: ['俯卧撑', '卧推', '推举', '臂屈伸', '飞鸟'],
   腿: ['蹲', '箭步', '臀桥', '硬拉', '提踵'],
   拉: ['划船', '弯举', '超人', '反向飞鸟', '支撑划船'],
 };
-function trainTag(items) {
-  if (!items || !items.length) return '';
-  const hit = {};
-  items.forEach(i => {
-    for (const g in TRAIN_KEYS) if (TRAIN_KEYS[g].some(k => i.name.indexOf(k) >= 0)) hit[g] = true;
-  });
-  return order3.filter(g => hit[g]).map(g =>
-    `<span title="${g}" style="display:inline-block;width:14px;height:14px;border-radius:4px;background:${TRAIN_COLORS[g]};margin-right:4px;vertical-align:middle"></span>`
-  ).join('');
-}
 function renderTable(rowsRaw, daily, trainLog) {
   const tb = document.querySelector('#bodyTable tbody');
   const rows = rowsRaw.map(derived);
   const trainByDate = {};
-  (trainLog || []).forEach(r => { trainByDate[r.date] = r.items; });
+  (trainLog || []).forEach(r => { trainByDate[r.date] = r; });
   const allDates = [...new Set([...rows.map(r => r.date), ...Object.keys(daily), ...Object.keys(trainByDate)])].sort().reverse();
   const rowOf = (d) => rows.find(r => r.date === d);
   const day = (d) => daily[d] || {};
   tb.innerHTML = allDates.map(d => {
     const r = rowOf(d) || {};
     const s = day(d);
+    const t = trainByDate[d];
     return `<tr>
       <td>${d}</td>
-      <td>${trainTag(trainByDate[d])}</td>
+      <td style="white-space:normal;min-width:180px">${t ? trainDetail(t) : ''}</td>
       <td class="num">${fmt(r.weight)}</td><td class="num">${fmt(r.fatMass)}</td><td class="num">${fmt(r.muscleMass)}</td>
       <td class="num">${r.fatMass ? fmt(r.bodyFat, 1) : ''}</td><td class="num">${r.muscleMass ? fmt(r.muscle, 1) : ''}</td>
       <td class="num">${fmt(s.activeEnergy)}</td><td class="num">${fmt(s.dietaryKcal)}</td>
@@ -1266,6 +1311,7 @@ function renderReview(rows, daily, goals, trainLog, training) {
     }
 
     step('table', () => renderTable(rows, daily, trainLog));
+    step('trainGrid', () => renderTrainGrid(trainLog));
     step('notes', () => renderNotes(knowledge));
     step('settings', () => renderSettings(goals));
     step('training', () => renderTraining(training));
