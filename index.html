@@ -404,10 +404,10 @@ function renderStats(rowsRaw, trainLogToday) {
 
 /* ---------- 目标趋势线(单线版,2026-11-18 定版) ----------
 // 2026-11-18 起简化:只保留一条目标线,删除 A/B/C/D 多情景线与承诺线。
-// 单线定义:训练+蛋白(φ~25%)+450-600kcal/天缺口,线性外推到 end。
+// 单线定义:训练与蛋白 + 450kcal/天缺口(实测难保证600)+ φ28% 中间态,线性外推到 end。
 // 2026-11-18 修订:锚点=10/18 计划起点(89.3/25.0/60.8),不是最新实测——线覆盖整个计划周期,实际曲线与线对比才有意义。
 // 体重/脂肪/肌肉各自一条线;体脂率=当天脂肪/当天体重逐点导出(凸形),「参考(非目标)」标签时照画线但不显示达成率。
-// 目标体重 75kg + 体脂 22%(2027-03-31):5 个月+抗阻训练的正常可达上限,非 18%(多年训练结果)。
+// 目标 3/31 = 76.9kg / 体脂 20.9%(450 缺口+φ28% 的推算终点);75kg 约 2027-04-26,需 520kcal/天才能压回 3/31。
 // 线固定锚定 10/18 计划起点,不再随 Review 重锚(要改线只改 goals.json 的 from/start,前端不用改)。
  */
 function goalDataset(g, goals) {
@@ -1124,7 +1124,7 @@ function renderReview(rows, daily, goals, trainLog, training) {
   /* ⑥ 自动建议(排序:训练缺口 → 饮食达标 → 数据质量 → 身体分析) */
   const advices = [];
   const dietDays = Object.keys(daily).filter(dt => dt >= FROM && dt <= TO && daily[dt].dietaryKcal != null).length;
-  if (!tlog.length) advices.push(`本期 0 次训练:目标线以 3次/周训练+450-600缺口/天 为前提,不启动则 3/31 无法达标 —— 先完成 1 次(周三·腿 或 周五·拉)`);
+  if (!tlog.length) advices.push(`本期 0 次训练:目标线以 3次/周训练+450缺口/天+φ28% 为前提,不启动则 3/31 无法达标 —— 先完成 1 次(周三·腿 或 周五·拉)`);
   const missing = MAJOR.filter(g => (w1[g] || 0) + (w2[g] || 0) === 0);
   if (missing.length) advices.push(`近 14 天未训练:${missing.join('、')} —— 下期各补 ≥${lo} 组(每次间隔 ≥48h,缺了不顺延)`);
   const low = MAJOR.filter(g => { const n = (w1[g] || 0) + (w2[g] || 0); return n > 0 && n < lo; });
