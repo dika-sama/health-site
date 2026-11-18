@@ -166,13 +166,11 @@
       <div class="stats" id="stats"></div>
       <div id="todayTrain" style="font-size:13px;padding:4px 2px 0"></div>
     </div>
-    <div class="card">
-      <h2>🏋️ 训练打卡(近14天)</h2>
-      <div class="hint">A推 / B腿 / C拉 三行 · 完成当天的训练日打对应色标;近7天次数见表下</div>
-      <div class="scroll"><table id="trainGrid"></table></div>
-      <div class="hint" id="trainGridSummary" style="margin:8px 0 0"></div>
-    </div>
     <div class="chart-rows" id="chartRows"><!-- 各图 hint 由 JS 按 goals/config 动态写入 --></div>
+    <div class="chart-row">
+      <div class="row-head"><h2>🏋️ 训练打卡</h2><div class="hint" id="hint-training">A推=1 · B腿=2 · C拉=3,未训练日无点;与上方图表同一时间轴</div></div>
+      <div class="chart-box"><canvas id="chart-training"></canvas></div>
+    </div>
     <div class="chart-row" id="macroRow" style="display:none">
       <div class="row-head"><h2>🥗 供能比 (%)</h2><div class="hint" id="hint-macro">每日三大营养素供能占比,阴影 = 合理区间</div></div>
       <div class="chart-box"><canvas id="chart-macro"></canvas></div>
@@ -617,7 +615,8 @@ function renderPlainBarChart(m, seriesRaw) {
 
 /* ---------- 目标 chips(已并入指标卡,保留函数备查) ---------- */
 
-/* ---------- 汇总页:训练打卡网格(A推/B腿/C拉 三行 × 近14天) ---------- */
+/* ---------- 汇总页:训练打卡散点图(A推=1 / B腿=2 / C拉=3,无连线,与趋势图同一时间轴) ---------- */
+// 训练动作 → 命中的训练日(推/腿/拉)
 function trainBlocks(items) {
   const hit = {};
   (items || []).forEach(i => order3.forEach(g => {
@@ -626,37 +625,59 @@ function trainBlocks(items) {
   return hit;
 }
 const TRAIN_DAY_LABEL = { 推: 'A 推', 腿: 'B 腿', 拉: 'C 拉' };
-function renderTrainGrid(trainLog) {
-  const el = document.getElementById('trainGrid');
-  const sumEl = document.getElementById('trainGridSummary');
-  if (!el) return;
+// 训练日 → y 值;同一训练日可多块,则各值各一个点
+const TRAIN_Y = { 推: 1, 腿: 2, 拉: 3 };
+function renderTrainingChart(trainLog) {
+  const canvas = document.getElementById('chart-training');
+  if (!canvas) return;
   const byDate = {};
   (trainLog || []).forEach(r => { byDate[r.date] = r; });
-  const d = new Date();
-  const dayKeys = (dd) => dd.getFullYear() + '-' + pad2(dd.getMonth() + 1) + '-' + pad2(dd.getDate());
-  const days = [];
-  for (let i = 13; i >= 0; i--) days.push(dayKeys(new Date(d.getFullYear(), d.getMonth(), d.getDate() - i)));
-  const fmtDay = (s) => s.slice(5).replace('-', '/');
-  const blocksOf = (s) => { const r = byDate[s]; return r ? trainBlocks(r.items) : {}; };
-  let html = `<thead><tr><th style="text-align:left">训练日</th>${days.map(s => `<th style="font-size:11px;font-weight:500;color:var(--muted)">${fmtDay(s)}</th>`).join('')}</tr></thead><tbody>`;
-  order3.forEach(g => {
-    html += `<tr><td style="white-space:nowrap"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${TRAIN_COLORS[g]};margin-right:6px;vertical-align:middle"></span>${TRAIN_DAY_LABEL[g]}</td>`;
-    html += days.map(s => {
-      const on = blocksOf(s)[g];
-      return `<td style="text-align:center"><span style="display:inline-block;width:16px;height:16px;border-radius:4px;background:${on ? TRAIN_COLORS[g] : 'var(--border)'}"></span></td>`;
-    }).join('');
-    html += '</tr>';
+  // 当天训练内容(动作×组数 + 备注),供悬停查看
+  const detail = (d) => {
+    const r = byDate[d];
+    if (!r) return '';
+    const parts = (r.items || []).map(i => `${i.name}${i.sets > 1 ? '×' + i.sets + '组' : ''}`);
+    return parts.join(' · ') + (r.note ? `\n📝 ${r.note}` : '');
+  };
+  const datasets = order3.map(g => ({
+    label: TRAIN_DAY_LABEL[g], _g: g,
+    type: 'scatter',
+    data: Object.keys(byDate)
+      .filter(d => trainBlocks(byDate[d].items)[g])
+      .filter(d => VIEW.start == null || (d >= VIEW.start && d <= VIEW.end))
+      .map(d => ({ x: new Date(d + 'T00:00:00'), y: TRAIN_Y[g], _d: d })),
+    backgroundColor: TRAIN_COLORS[g] + 'e6',
+    borderColor: TRAIN_COLORS[g],
+    pointRadius: 6, pointHoverRadius: 9, pointBorderWidth: 1,
+    showLine: false,
+  }));
+  if (charts['training']) charts['training'].destroy();
+  charts['training'] = new Chart(canvas, {
+    type: 'scatter',
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: false },
+      parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+      layout: { padding: { top: 12, right: 0, left: 0 } },
+      scales: {
+        x: { type: 'time', min: axMin(), max: axMax(), time: { unit: 'week', displayFormats: { week: 'M/d' } } },
+        y: {
+          min: 0, max: 4, afterFit: (sc) => { sc.width = 46; },
+          ticks: { stepSize: 1, callback: (v) => ({ 1: 'A 推', 2: 'B 腿', 3: 'C 拉' })[v] || '' },
+        },
+      },
+      plugins: {
+        legend: { display: true, position: 'top', labels: { boxWidth: 10, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            title: (items) => items[0] && items[0].raw._d ? items[0].raw._d : '',
+            label: (item) => `${TRAIN_DAY_LABEL[order3[item.datasetIndex]] || item.dataset.label}: ${detail(item.raw._d) || ''}`,
+          },
+        },
+      },
+    },
   });
-  html += '</tbody>';
-  el.innerHTML = html;
-  // 近7天次数汇总
-  if (sumEl) {
-    const week = days.slice(-7);
-    const counts = {};
-    order3.forEach(g => { counts[g] = 0; });
-    week.forEach(s => { order3.forEach(g => { if (blocksOf(s)[g]) counts[g]++; }); });
-    sumEl.innerHTML = `近7天: ${order3.map(g => `<b style="color:${TRAIN_COLORS[g]}">${TRAIN_DAY_LABEL[g]} ${counts[g]}</b>`).join(' · ')} 次(目标 3 次/周,每肌群 4-6 组)`;
-  }
 }
 
 /* ---------- 表格页:每日全量汇总(身体+活动+饮食+训练) ---------- */
@@ -1288,6 +1309,7 @@ function renderReview(rows, daily, goals, trainLog, training) {
         renderPlainBarChart(m, series);
       }
       renderMacroChart(daily);
+      renderTrainingChart(trainLog);   // 训练散点图同样随月份视图过滤
     };
     const viewSel = document.getElementById('viewRange');
     if (viewSel) viewSel.onchange = () => { setView(viewSel.value); rerenderCharts(); };
@@ -1311,7 +1333,7 @@ function renderReview(rows, daily, goals, trainLog, training) {
     }
 
     step('table', () => renderTable(rows, daily, trainLog));
-    step('trainGrid', () => renderTrainGrid(trainLog));
+    step('trainChart', () => renderTrainingChart(trainLog));
     step('notes', () => renderNotes(knowledge));
     step('settings', () => renderSettings(goals));
     step('training', () => renderTraining(training));
