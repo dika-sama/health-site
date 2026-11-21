@@ -192,7 +192,7 @@
           "cue": "站起时脚跟蹬地、臀腿发力;下蹲时大腿前侧和臀部拉伸。",
           "key": "脚尖略外、膝盖对准脚尖、蹲到大腿平行;胸口打开。",
           "mistake": "膝盖内扣、脚跟离地、弯腰。",
-          "when": "在家/热身"
+          "when": "GIF 为徒手深蹲示范;在家/热身首选。"
         },
         {
           "id": "legs-db-goblet",
@@ -279,6 +279,27 @@
           "key": "脊柱中立、核心锁住;髋关节铰链。",
           "mistake": "弯腰、手臂拉绳借力。",
           "when": "你的龙门架「高位扭腰」"
+        }
+      ]
+    },
+    {
+      "id": "lower-back",
+      "name": "下背",
+      "icon": "🪵",
+      "note": "超人式/反向挺身;原始 C 拉的下背动作",
+      "variants": [
+        {
+          "id": "back-extension",
+          "mode": "自重",
+          "name": "超人式/反向挺身",
+          "gif": "assets/exercises/back-extension.gif",
+          "sets": "2",
+          "reps": "12-15",
+          "muscle": "竖脊肌 + 臀大肌 + 核心",
+          "cue": "发力感:俯卧时下背和臀部一起收紧,把四肢/腿抬离地面,不是用腰猛甩。",
+          "key": "核心点:抬起时吐气、保持 1-2 秒;下放慢,不要猛摔;脖子放松看地面。",
+          "mistake": "常见错:抬得过高导致腰椎过伸、憋气、用惯性甩。",
+          "when": "GIF 为反向挺身(趴凳抬腿);超人式同时抬四肢,下背发力相同。在家用瑜伽垫。"
         }
       ]
     },
@@ -528,5 +549,5 @@
     "外食控油:超标日几乎都是外食油——点蒸/煮/白灼/清炒,酱汁 separate;奶油、炸、干煸、水煮(油煮)绕行",
     "餐间分配:晚上活动少但练后合成窗口在,碳水挪到练后那顿;不练的晚上碳水减半拳,蛋白不减"
   ],
-  "gifSource": "ExerciseGymGifsDB (public domain, CC0) + ExerciseDB;本地存放 assets/exercises/"
+  "gifSource": "ExerciseGymGifsDB (CC0) + ExerciseDB + GIFDB;本地存放 assets/exercises/"
 }
