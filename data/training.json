@@ -69,15 +69,15 @@
         {
           "id": "chest-cable-fly",
           "mode": "龙门架",
-          "name": "站姿绳索夹胸",
+          "name": "单臂绳索夹胸",
           "gif": "assets/exercises/cable-fly.gif",
           "sets": "2",
           "reps": "12-15",
           "muscle": "胸大肌(持续张力)",
-          "cue": "双手从两侧划弧向前上方合拢,胸肌全程有张力。",
-          "key": "微屈肘、身体略前倾、核心收紧;不要耸肩。",
+          "cue": "一只手从侧前方划弧拉向胸前,胸肌收缩;GIF 为真人单臂版。",
+          "key": "微屈肘、身体略前倾、核心收紧;不要耸肩、不要转髋借力。",
           "mistake": "重量过大身体晃、手肘锁死。",
-          "when": "龙门架高位/低位都能做"
+          "when": "龙门架单手把手/绳索都能做"
         }
       ]
     },
@@ -383,6 +383,19 @@
           "when": "你的龙门架「低位划船」"
         },
         {
+          "id": "back-pulldown",
+          "mode": "龙门架",
+          "name": "高位下拉",
+          "gif": "assets/exercises/cable-pulldown.gif",
+          "sets": "3",
+          "reps": "10-12",
+          "muscle": "背阔肌 + 二头 + 后束",
+          "cue": "用背肌把杆拉向胸口上方,想象肘往下压;不是手臂硬拉。",
+          "key": "肩胛下沉启动、躯干微后倾 10°、核心收紧;拉到上胸/锁骨,不要耸肩。",
+          "mistake": "身体后仰过多、只用手臂、半程。",
+          "when": "你的龙门架「可以往下拉」"
+        },
+        {
           "id": "back-pullup",
           "mode": "龙门架",
           "name": "引体向上",
@@ -549,5 +562,5 @@
     "外食控油:超标日几乎都是外食油——点蒸/煮/白灼/清炒,酱汁 separate;奶油、炸、干煸、水煮(油煮)绕行",
     "餐间分配:晚上活动少但练后合成窗口在,碳水挪到练后那顿;不练的晚上碳水减半拳,蛋白不减"
   ],
-  "gifSource": "ExerciseGymGifsDB (CC0) + ExerciseDB + GIFDB;本地存放 assets/exercises/"
+  "gifSource": "ExerciseGymGifsDB (CC0) + ExerciseDB + GIFDB + Coverr (royalty-free, no attribution); real-action GIFs cut locally from Coverr video with ffmpeg (palettegen/paletteuse), stored assets/exercises/"
 }
