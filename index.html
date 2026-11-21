@@ -155,6 +155,24 @@
   .variant-mistake { color: #9a6a00; }
   .variant-when { font-size: 11px; color: var(--muted); margin-top: 6px; border-top: 1px dashed var(--border); padding-top: 5px; }
   .variant-pick { font-size: 11px; color: var(--accent); font-weight: 600; margin-top: 6px; text-align: right; }
+  /* ABC 课表 */
+  .session-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .session-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: var(--card); }
+  .session-card.today { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .session-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .session-badge { font-size: 13px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 8px; padding: 2px 8px; }
+  .session-title { font-size: 14px; font-weight: 600; }
+  .session-day { margin-left: auto; font-size: 11px; color: var(--muted); }
+  .session-today { font-size: 10px; color: var(--accent); border: 1px solid var(--accent); border-radius: 999px; padding: 1px 7px; font-weight: 600; }
+  .session-exercise { display: flex; gap: 9px; padding: 9px 0; border-top: 1px dashed var(--border); }
+  .session-exercise:first-of-type { border-top: 0; padding-top: 2px; }
+  .session-gif { width: 72px; height: 42px; object-fit: contain; background: #f7f7f8; border-radius: 7px; flex: 0 0 auto; }
+  .session-info { min-width: 0; flex: 1; }
+  .session-name { font-size: 13px; font-weight: 600; line-height: 1.35; }
+  .session-mode { display: inline-block; font-size: 10px; padding: 1px 7px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin-left: 5px; font-weight: 400; }
+  .session-dose { font-size: 11px; color: var(--muted); margin-left: 5px; font-weight: 400; }
+  .session-key { font-size: 11px; color: var(--muted); line-height: 1.55; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .session-alts { font-size: 11px; color: var(--accent); margin-top: 3px; }
   footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 40px; }
   @media (max-width: 600px) { .chart-box { height: 200px; } }
   /* 大屏行式布局:图略升高度 */
@@ -292,10 +310,15 @@
     </div>
   </div>
 
-  <!-- ============ 训练页:按肌群横排选动作(GIF+发力提示);打卡与周组数核对归 Review/数据页 ============ -->
+  <!-- ============ 训练页:ABC课表(每日安排)+ 按肌群横排选动作;打卡与周组数核对归 Review/数据页 ============ -->
   <div class="page" id="page-training">
     <div class="card">
-      <h2>🏋️ 训练动作库(按肌群选)</h2>
+      <h2>📅 ABC 课表</h2>
+      <div class="hint">A推=胸/肩/三头 · B腿=腿/臀/小腿 · C拉=背/后束/下背/核心/二头;选器械后课表自动切换版本</div>
+      <div id="sessionsBox"></div>
+    </div>
+    <div class="card">
+      <h2>🏋️ 动作库(按肌群/GIF选)</h2>
       <div class="hint" id="trainingTargetHint"></div>
       <div class="train-filter" id="trainFilter">
         <button data-mode="all" class="active">全部器械</button>
@@ -811,17 +834,69 @@ function renderNotes(items) {
   show(sorted[0]);
 }
 
-/* ---------- 训练页:按肌群横排选动作(GIF+发力提示);饮食拆到独立页 ---------- */
+/* ---------- 训练页:ABC课表(每日安排)+ 按肌群横排选动作;饮食拆到独立页 ---------- */
 const TRAIN_PICK_KEY = 'healthsite_training_picks_v1';
 function renderTraining(training) {
   if (!training || !training.groups || !training.groups.length) return;
   const t = training.target || {};
   const dose = t.setsPerMusclePerWeek || { min: 4, max: 6 };
   document.getElementById('trainingTargetHint').textContent =
-    `每周 ${t.sessionsPerWeek || 3} 次 · 每肌群周 ${dose.min}-${dose.max} 组(维持剂量) · 按当天器械选 1 个动作,每个 2-3 组;点卡片选「今天用这个」(仅存在本机浏览器)`;
+    `每周 ${t.sessionsPerWeek || 3} 次 · 每肌群周 ${dose.min}-${dose.max} 组(维持剂量) · 上方 ABC 课表是每日安排;下方动作库可换器械/看 GIF,点卡片选「今天用这个」(仅存在本机浏览器)`;
   let picks = {};
   try { picks = JSON.parse(localStorage.getItem(TRAIN_PICK_KEY) || '{}') || {}; } catch (e) {}
   let mode = 'all';
+  const variantById = {};
+  training.groups.forEach(g => (g.variants || []).forEach(v => { variantById[v.id] = v; }));
+  const weekday = '周' + '日一二三四五六'[new Date().getDay()];
+  // 课表动作解析:指定器械时优先 byMode;modes 限定该动作适用的器械,bodyweight 动作通常不限
+  function resolveSessionItem(item) {
+    if (mode !== 'all' && item.modes && item.modes.indexOf(mode) < 0 && !(item.byMode && item.byMode[mode])) return null;
+    let vid = item.variant;
+    if (mode !== 'all' && item.byMode && item.byMode[mode]) vid = item.byMode[mode];
+    return variantById[vid] || null;
+  }
+  function renderSessions() {
+    const box = document.getElementById('sessionsBox');
+    if (!box) return;
+    const sessions = training.sessions || [];
+    if (!sessions.length) { box.innerHTML = ''; return; }
+    box.innerHTML = '<div class="session-grid">' + sessions.map(s => {
+      const rows = (s.items || []).map(item => {
+        const v = resolveSessionItem(item);
+        if (!v) return null;
+        const alts = [];
+        if (mode === 'all' && item.byMode) {
+          Object.keys(item.byMode).forEach(m => {
+            const av = variantById[item.byMode[m]];
+            if (av && av.id !== v.id) alts.push(m + ':' + av.name);
+          });
+        }
+        return `<div class="session-exercise">
+          <img class="session-gif" src="${v.gif}" alt="${v.name}">
+          <div class="session-info">
+            <div class="session-name">${v.name}<span class="session-mode">${v.mode}</span><span class="session-dose">${v.sets}组 × ${v.reps}</span></div>
+            <div class="session-key">${v.key || v.cue || ''}</div>
+            ${alts.length ? `<div class="session-alts">可换:${alts.join(' / ')}</div>` : ''}
+          </div>
+        </div>`;
+      }).filter(Boolean).join('');
+      if (!rows) return '';
+      const total = (s.items || []).reduce((sum, item) => {
+        const v = resolveSessionItem(item);
+        return sum + (v ? (parseInt(v.sets, 10) || 0) : 0);
+      }, 0);
+      const today = (s.day || '').indexOf(weekday) >= 0;
+      return `<div class="session-card${today ? ' today' : ''}">
+        <div class="session-head">
+          <span class="session-badge">${s.id}</span>
+          <span class="session-title">${s.title || ''}</span>
+          ${today ? '<span class="session-today">今天</span>' : ''}
+          <span class="session-day">${s.day || ''}${total ? ' · ' + total + ' 组' : ''}</span>
+        </div>
+        ${rows}
+      </div>`;
+    }).join('') + '</div>';
+  }
   const groupsEl = document.getElementById('groupsBox');
   const render = () => {
     groupsEl.innerHTML = training.groups.map(g => {
@@ -856,14 +931,16 @@ function renderTraining(training) {
   document.getElementById('trainFilter').querySelectorAll('button').forEach(btn => btn.onclick = () => {
     mode = btn.dataset.mode;
     document.querySelectorAll('#trainFilter button').forEach(b => b.classList.toggle('active', b === btn));
+    renderSessions();
     render();
   });
+  renderSessions();
   render();
   const credit = document.getElementById('gifCredit');
   if (credit) credit.textContent = 'GIF 来源:' + (training.gifSource || 'ExerciseGymGifsDB / ExerciseDB');
   document.getElementById('trainingRules').innerHTML = `<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9">
+    <li><b>ABC 分组:</b>A推(周一)→B腿(周三)→C拉(周五/周六),正好错开 ≥48h;缺了就跳过,不顺延堆积</li>
     <li><b>强度判断:</b>每组做到「还能再做 2 次」(2-3 RIR)就停下;能轻松做满上限次数,下次加难度/加 2.5kg</li>
-    <li><b>安排间隔:</b>同一肌群两次训练间隔 ≥48 小时;缺了就跳过,不顺延堆积</li>
     <li><b>酸痛判读:</b>新动作后 24-48h 的酸痛(DOMS)= 正常,不作为加练理由;关节刺痛 = 停,肌肉酸痛 = 可轻量继续</li>
     <li><b>进退标准:</b>动作能标准做满上限 → 升级难度;做不到下限 → 降级难度,动作质量优先于次数</li>
     <li><b>选动作:</b>同一肌群一次只选一个变式(如胸:俯卧撑/哑铃卧推/龙门架夹胸三选一),2-3 组即可;不同肌群的变式可自由组合</li>

@@ -7,6 +7,138 @@
     },
     "note": "维持肌肉的最低有效剂量:大肌群每周 4-6 组,分散到 3 次训练(同一肌群间隔 ≥48h);每个肌群从 variants 里按当日器械选 1 个动作,每个动作 2-3 组即可"
   },
+  "sessions": [
+    {
+      "id": "A",
+      "day": "周一",
+      "title": "推 · 胸/肩/三头",
+      "items": [
+        {
+          "group": "chest",
+          "variant": "chest-pushup",
+          "byMode": {
+            "哑铃": "chest-db-press",
+            "龙门架": "chest-cable-fly"
+          }
+        },
+        {
+          "group": "chest",
+          "variant": "chest-wide-pushup",
+          "modes": [
+            "自重"
+          ],
+          "byMode": {
+            "哑铃": "chest-db-fly"
+          }
+        },
+        {
+          "group": "shoulders",
+          "variant": "shoulders-pike",
+          "byMode": {
+            "哑铃": "shoulders-db-press",
+            "龙门架": "shoulders-cable-press"
+          }
+        },
+        {
+          "group": "triceps",
+          "variant": "triceps-dip",
+          "byMode": {
+            "哑铃": "triceps-db-ext",
+            "龙门架": "triceps-cable-pushdown"
+          }
+        }
+      ]
+    },
+    {
+      "id": "B",
+      "day": "周三",
+      "title": "腿 · 腿/臀/小腿",
+      "items": [
+        {
+          "group": "legs",
+          "variant": "legs-bodyweight-squat",
+          "modes": [
+            "自重",
+            "龙门架"
+          ],
+          "byMode": {
+            "哑铃": "legs-db-goblet"
+          }
+        },
+        {
+          "group": "legs",
+          "variant": "legs-db-lunge",
+          "modes": [
+            "哑铃"
+          ]
+        },
+        {
+          "group": "glutes-hams",
+          "variant": "glutes-bridge",
+          "byMode": {
+            "哑铃": "glutes-db-rdl",
+            "龙门架": "glutes-cable-pullthrough"
+          }
+        },
+        {
+          "group": "calves",
+          "variant": "calves-bodyweight",
+          "byMode": {
+            "哑铃": "calves-db"
+          }
+        }
+      ]
+    },
+    {
+      "id": "C",
+      "day": "周五或周六",
+      "title": "拉 · 背/后束/下背/核心/二头",
+      "items": [
+        {
+          "group": "back",
+          "variant": "back-inverted-row",
+          "byMode": {
+            "哑铃": "back-db-row",
+            "龙门架": "back-cable-row"
+          }
+        },
+        {
+          "group": "lower-back",
+          "variant": "back-extension"
+        },
+        {
+          "group": "rear-delts",
+          "variant": "rear-db-fly",
+          "modes": [
+            "哑铃",
+            "龙门架"
+          ],
+          "byMode": {
+            "龙门架": "rear-cable-fly"
+          }
+        },
+        {
+          "group": "core",
+          "variant": "core-plank",
+          "modes": [
+            "自重",
+            "哑铃"
+          ],
+          "byMode": {
+            "龙门架": "core-cable-crunch"
+          }
+        },
+        {
+          "group": "biceps",
+          "variant": "biceps-bodyweight",
+          "byMode": {
+            "哑铃": "biceps-db-curl",
+            "龙门架": "biceps-cable-curl"
+          }
+        }
+      ]
+    }
+  ],
   "groups": [
     {
       "id": "chest",
