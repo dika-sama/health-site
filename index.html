@@ -132,11 +132,19 @@
     border-radius: 999px; padding: 5px 14px; font-size: 12px; cursor: pointer;
   }
   .train-filter button.active { background: var(--accent-soft); color: var(--accent); border-color: #f3caca; }
+  .cache-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+  .cache-btn {
+    border: 1px solid var(--border); background: var(--card); color: var(--text);
+    border-radius: 999px; padding: 5px 14px; font-size: 12px; cursor: pointer;
+  }
+  .cache-btn:hover:not(:disabled) { border-color: #f3caca; color: var(--accent); }
+  .cache-btn:disabled { opacity: .55; cursor: default; }
   .muscle-group { margin-bottom: 18px; }
   .muscle-group.hidden { display: none; }
   .muscle-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
   .muscle-head h3 { font-size: 15px; }
   .muscle-head .note { font-size: 11px; color: var(--muted); }
+  .fallback-note { font-size: 10px; color: #8a4b00; background: #fff1df; border: 1px solid #f0c89a; border-radius: 999px; padding: 2px 8px; }
   .variant-row { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; }
   .variant-card {
     flex: 0 0 280px; border: 1px solid var(--border); border-radius: 12px; padding: 10px;
@@ -145,6 +153,9 @@
   }
   .variant-card:hover { border-color: #f3caca; }
   .variant-card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); background: #fffafa; }
+  .variant-card.recommended { border-color: #e08c2f; box-shadow: 0 0 0 2px #fff1df; }
+  .variant-rec { position: absolute; top: 8px; right: 8px; font-size: 10px; font-weight: 700; color: #8a4b00; background: #fff1df; border: 1px solid #f0c89a; border-radius: 999px; padding: 2px 7px; }
+  .variant-card { position: relative; }
   .variant-gif { width: 100%; height: 150px; object-fit: contain; background: #f7f7f8; border-radius: 8px; display: block; }
   .variant-mode { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin: 8px 0 4px; }
   .variant-name { font-size: 14px; font-weight: 600; }
@@ -157,8 +168,10 @@
   .variant-pick { font-size: 11px; color: var(--accent); font-weight: 600; margin-top: 6px; text-align: right; }
   /* ABC 课表 */
   .session-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
-  .session-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: var(--card); }
+  .session-card { border: 1px solid var(--border); border-radius: 12px; padding: 12px; background: var(--card); cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+  .session-card:hover { border-color: #f3caca; }
   .session-card.today { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .session-card.selected { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); background: #fffafa; }
   .session-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
   .session-badge { font-size: 13px; font-weight: 700; color: #fff; background: var(--accent); border-radius: 8px; padding: 2px 8px; }
   .session-title { font-size: 14px; font-weight: 600; }
@@ -314,11 +327,11 @@
   <div class="page" id="page-training">
     <div class="card">
       <h2>📅 ABC 课表</h2>
-      <div class="hint">A推=胸/肩/三头 · B腿=腿/臀/小腿 · C拉=背/后束/下背/核心/二头;选器械后课表自动切换版本</div>
+      <div class="hint">点课表卡 → 下方只显示当天肌群;再点一次显示全部。选器械后课表自动切换版本</div>
       <div id="sessionsBox"></div>
     </div>
-    <div class="card">
-      <h2>🏋️ 动作库(按肌群/GIF选)</h2>
+    <div class="card" id="libraryCard">
+      <h2 id="libraryTitle">🏋️ 动作库</h2>
       <div class="hint" id="trainingTargetHint"></div>
       <div class="train-filter" id="trainFilter">
         <button data-mode="all" class="active">全部器械</button>
@@ -327,6 +340,10 @@
         <button data-mode="龙门架">龙门架</button>
       </div>
       <div id="groupsBox"></div>
+      <div class="cache-row">
+        <button id="cacheAllBtn" class="cache-btn">⬇ 离线缓存全部动作图</button>
+        <span id="cacheStatus" class="hint"></span>
+      </div>
       <div class="hint" id="gifCredit" style="margin-top:10px"></div>
     </div>
     <div class="card">
@@ -840,20 +857,31 @@ function renderTraining(training) {
   if (!training || !training.groups || !training.groups.length) return;
   const t = training.target || {};
   const dose = t.setsPerMusclePerWeek || { min: 4, max: 6 };
-  document.getElementById('trainingTargetHint').textContent =
-    `每周 ${t.sessionsPerWeek || 3} 次 · 每肌群周 ${dose.min}-${dose.max} 组(维持剂量) · 上方 ABC 课表是每日安排;下方动作库可换器械/看 GIF,点卡片选「今天用这个」(仅存在本机浏览器)`;
   let picks = {};
   try { picks = JSON.parse(localStorage.getItem(TRAIN_PICK_KEY) || '{}') || {}; } catch (e) {}
   let mode = 'all';
   const variantById = {};
   training.groups.forEach(g => (g.variants || []).forEach(v => { variantById[v.id] = v; }));
+  const sessionById = {};
+  (training.sessions || []).forEach(s => { sessionById[s.id] = s; });
   const weekday = '周' + '日一二三四五六'[new Date().getDay()];
-  // 课表动作解析:指定器械时优先 byMode;modes 限定该动作适用的器械,bodyweight 动作通常不限
-  function resolveSessionItem(item) {
-    if (mode !== 'all' && item.modes && item.modes.indexOf(mode) < 0 && !(item.byMode && item.byMode[mode])) return null;
+  // 默认选中今天对应的课表(周日/无匹配则显示全部)
+  const todaySession = (training.sessions || []).find(s => (s.day || '').indexOf(weekday) >= 0);
+  let selectedSession = todaySession ? todaySession.id : 'all';
+  // 课表动作解析:指定器械时优先 byMode;modes 限定该动作适用的器械
+  function resolveVariant(item, useMode) {
+    if (!item) return null;
+    if (useMode !== 'all' && item.modes && item.modes.indexOf(useMode) < 0 && !(item.byMode && item.byMode[useMode])) return null;
     let vid = item.variant;
-    if (mode !== 'all' && item.byMode && item.byMode[mode]) vid = item.byMode[mode];
+    if (useMode !== 'all' && item.byMode && item.byMode[useMode]) vid = item.byMode[useMode];
     return variantById[vid] || null;
+  }
+  function recommendedVariant(gid) {
+    if (selectedSession === 'all') return null;
+    const s = sessionById[selectedSession];
+    if (!s) return null;
+    const item = (s.items || []).find(i => i.group === gid);
+    return resolveVariant(item, mode);
   }
   function renderSessions() {
     const box = document.getElementById('sessionsBox');
@@ -862,7 +890,7 @@ function renderTraining(training) {
     if (!sessions.length) { box.innerHTML = ''; return; }
     box.innerHTML = '<div class="session-grid">' + sessions.map(s => {
       const rows = (s.items || []).map(item => {
-        const v = resolveSessionItem(item);
+        const v = resolveVariant(item, mode);
         if (!v) return null;
         const alts = [];
         if (mode === 'all' && item.byMode) {
@@ -882,11 +910,12 @@ function renderTraining(training) {
       }).filter(Boolean).join('');
       if (!rows) return '';
       const total = (s.items || []).reduce((sum, item) => {
-        const v = resolveSessionItem(item);
+        const v = resolveVariant(item, mode);
         return sum + (v ? (parseInt(v.sets, 10) || 0) : 0);
       }, 0);
       const today = (s.day || '').indexOf(weekday) >= 0;
-      return `<div class="session-card${today ? ' today' : ''}">
+      const selected = selectedSession !== 'all' && selectedSession === s.id;
+      return `<div class="session-card${today ? ' today' : ''}${selected ? ' selected' : ''}" data-sid="${s.id}">
         <div class="session-head">
           <span class="session-badge">${s.id}</span>
           <span class="session-title">${s.title || ''}</span>
@@ -896,19 +925,50 @@ function renderTraining(training) {
         ${rows}
       </div>`;
     }).join('') + '</div>';
+    box.querySelectorAll('.session-card').forEach(card => card.onclick = () => {
+      const sid = card.dataset.sid;
+      selectedSession = selectedSession === sid ? 'all' : sid;
+      renderSessions();
+      render();
+      if (selectedSession !== 'all') {
+        const lib = document.getElementById('libraryCard');
+        if (lib) lib.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
   }
   const groupsEl = document.getElementById('groupsBox');
   const render = () => {
+    const sessionGroups = selectedSession !== 'all' && sessionById[selectedSession]
+      ? new Set((sessionById[selectedSession].items || []).map(i => i.group)) : null;
+    const sessionLabel = selectedSession === 'all' ? '全部课表' : (sessionById[selectedSession].title || selectedSession);
+    const modeLabel = mode === 'all' ? '全部器械' : mode;
+    const libTitle = document.getElementById('libraryTitle');
+    if (libTitle) libTitle.textContent = selectedSession === 'all' ? '🏋️ 全部动作库' : `🏋️ ${selectedSession} · 动作库`;
+    document.getElementById('trainingTargetHint').textContent =
+      `当前:${sessionLabel} · ${modeLabel} · 每周 ${t.sessionsPerWeek || 3} 次、每肌群周 ${dose.min}-${dose.max} 组;只显示相关肌群,点卡片选「今天用这个」(仅存在本机浏览器)`;
     groupsEl.innerHTML = training.groups.map(g => {
-      const variants = g.variants || [];
-      const shown = mode === 'all' ? variants : variants.filter(x => x.mode === mode);
-      if (!shown.length) return '';
+      if (sessionGroups && !sessionGroups.has(g.id)) return '';
+      let shown = g.variants || [];
+      if (mode !== 'all') shown = shown.filter(x => x.mode === mode);
+      let fallbackNote = '';
+      if (!shown.length) {
+        if (selectedSession === 'all') return '';
+        const sessionItem = (sessionById[selectedSession].items || []).find(i => i.group === g.id);
+        const fallback = sessionItem && variantById[sessionItem.variant];
+        if (!fallback) return '';
+        shown = [fallback];
+        fallbackNote = '当前器械无对应动作,先用课表默认版';
+      }
+      const rec = recommendedVariant(g.id);
+      if (rec) shown = shown.slice().sort((a, b) => (b.id === rec.id ? 1 : 0) - (a.id === rec.id ? 1 : 0));
       return `<div class="muscle-group" data-group="${g.id}">
-        <div class="muscle-head"><h3>${g.icon || ''} ${g.name}</h3><span class="note">${g.note || ''}</span></div>
+        <div class="muscle-head"><h3>${g.icon || ''} ${g.name}</h3><span class="note">${g.note || ''}</span>${fallbackNote ? `<span class="fallback-note">${fallbackNote}</span>` : ''}</div>
         <div class="variant-row">${shown.map(x => {
           const picked = picks[g.id] === x.id;
-          return `<div class="variant-card${picked ? ' picked' : ''}" data-group="${g.id}" data-id="${x.id}">
-            <img class="variant-gif" src="${x.gif}" alt="${x.name}" loading="lazy">
+          const recMark = rec && x.id === rec.id;
+          return `<div class="variant-card${picked ? ' picked' : ''}${recMark ? ' recommended' : ''}" data-group="${g.id}" data-id="${x.id}">
+            ${recMark ? '<span class="variant-rec">课表推荐</span>' : ''}
+            <img class="variant-gif" src="${x.gif}" alt="${x.name}" loading="lazy" decoding="async">
             <span class="variant-mode">${x.mode}</span>
             <div class="variant-name">${x.name}<span class="variant-dose">${x.sets}组 × ${x.reps}</span></div>
             <div class="variant-muscle">${x.muscle || ''}</div>
@@ -938,6 +998,27 @@ function renderTraining(training) {
   render();
   const credit = document.getElementById('gifCredit');
   if (credit) credit.textContent = 'GIF 来源:' + (training.gifSource || 'ExerciseGymGifsDB / ExerciseDB');
+  const cacheBtn = document.getElementById('cacheAllBtn');
+  const cacheStatus = document.getElementById('cacheStatus');
+  if (cacheBtn && !cacheBtn.dataset.bound) {
+    cacheBtn.dataset.bound = '1';
+    cacheBtn.onclick = async () => {
+      const gifs = [];
+      training.groups.forEach(g => (g.variants || []).forEach(v => {
+        if (v.gif && gifs.indexOf(v.gif) < 0) gifs.push(v.gif);
+      }));
+      cacheBtn.disabled = true;
+      let done = 0;
+      if (cacheStatus) cacheStatus.textContent = '缓存中 0/' + gifs.length;
+      for (const src of gifs) {
+        try { await fetch(src); } catch (e) {}
+        done++;
+        if (cacheStatus) cacheStatus.textContent = '缓存中 ' + done + '/' + gifs.length;
+      }
+      if (cacheStatus) cacheStatus.textContent = '已缓存 ' + done + '/' + gifs.length + ',无网也能看';
+      cacheBtn.disabled = false;
+    };
+  }
   document.getElementById('trainingRules').innerHTML = `<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9">
     <li><b>ABC 分组:</b>A推(周一)→B腿(周三)→C拉(周五/周六),正好错开 ≥48h;缺了就跳过,不顺延堆积</li>
     <li><b>强度判断:</b>每组做到「还能再做 2 次」(2-3 RIR)就停下;能轻松做满上限次数,下次加难度/加 2.5kg</li>
@@ -1429,6 +1510,10 @@ function renderReview(rows, daily, goals, trainLog, training) {
     document.getElementById('updated').textContent = '数据加载失败: ' + e.message;
   }
 })();
+// 离线缓存(GitHub Pages/localhost 可用;非安全上下文如内网 HTTP 会自动跳过)
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(function () {});
+}
 </script>
 </body>
 </html>
