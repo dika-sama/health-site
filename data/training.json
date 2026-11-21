@@ -1,43 +1,494 @@
 {
   "target": {
     "sessionsPerWeek": 3,
-    "setsPerMusclePerWeek": { "min": 4, "max": 6 },
-    "note": "维持肌肉的最低有效剂量:大肌群每周 4-6 组,分散到 3 次训练(同一肌群间隔 ≥48h);自重动作用「还能做2次」的强度,能轻松做完就加难度或负重",
-    "dumbbellNote": "有一对可调哑铃后:同一天的结构不变(还是推/腿/拉),只是把自重动作升级为哑铃版本——负重可控、进步可量化(每 2.5kg 一档),刺激强度和保肌余量都更好"
+    "setsPerMusclePerWeek": {
+      "min": 4,
+      "max": 6
+    },
+    "note": "维持肌肉的最低有效剂量:大肌群每周 4-6 组,分散到 3 次训练(同一肌群间隔 ≥48h);每个肌群从 variants 里按当日器械选 1 个动作,每个动作 2-3 组即可"
   },
-  "sessions": [
+  "groups": [
     {
-      "id": "A",
-      "day": "周一",
-      "title": "推 · 胸/肩/三头",
-      "exercises": [
-        { "name": "俯卧撑", "muscle": "胸", "sets": 3, "reps": "8-15", "note": "标准→跪姿→上斜撑桌递减难度;做满15次就垫高脚", "db": "哑铃卧推(躺床/凳):8-12次,2-3 RIR;做满12次下次加 2.5kg" },
-        { "name": "宽距俯卧撑", "muscle": "胸", "sets": 2, "reps": "8-12", "note": "手比肩宽一掌,侧重胸外侧", "db": "哑铃飞鸟(躺姿,微屈肘抱水桶感):10-12 次,重点拉伸到胸口有绷紧感" },
-        { "name": "派克俯卧撑", "muscle": "肩", "sets": 2, "reps": "6-12", "note": "屁股抬高的倒V形,头顶朝下", "db": "哑铃肩上推举(站/坐):8-12 次;推起时别耸肩,手腕不后仰" },
-        { "name": "凳上臂屈伸", "muscle": "三头", "sets": 2, "reps": "10-15", "note": "背对椅子/床沿撑手下沉", "db": "哑铃颈后臂屈伸(双手托一端):10-12 次;肘夹紧朝前,大臂垂直地面" }
+      "id": "chest",
+      "name": "胸",
+      "icon": "🫀",
+      "note": "推 + 夹胸;选 1 个主动作即可",
+      "variants": [
+        {
+          "id": "chest-pushup",
+          "mode": "自重",
+          "name": "俯卧撑",
+          "gif": "assets/exercises/pushup.gif",
+          "sets": "3",
+          "reps": "8-15",
+          "muscle": "胸大肌主导,三头/前束辅助",
+          "cue": "下放时胸肌被拉开,推起时胸肌收缩把身体推离地面——不是手臂在硬撑。",
+          "key": "肩胛微收、身体一条直线;手肘与身体约 45°,下放到胸接近地面。",
+          "mistake": "塌腰、屁股抬高、手肘外撇、只做半程。",
+          "when": "在家/无器械首选"
+        },
+        {
+          "id": "chest-wide-pushup",
+          "mode": "自重",
+          "name": "宽距俯卧撑",
+          "gif": "assets/exercises/wide-pushup.gif",
+          "sets": "2",
+          "reps": "8-12",
+          "muscle": "胸外侧 + 前锯肌",
+          "cue": "比标准俯卧撑更偏胸外侧,下放时胸外侧拉伸更明显。",
+          "key": "手比肩宽一掌,其余要点同标准俯卧撑。",
+          "mistake": "为了宽而牺牲身体直线。",
+          "when": "想多刺激胸外侧时换这个"
+        },
+        {
+          "id": "chest-db-press",
+          "mode": "哑铃",
+          "name": "哑铃卧推",
+          "gif": "assets/exercises/db-bench-press.gif",
+          "sets": "3",
+          "reps": "8-12",
+          "muscle": "胸大肌整体",
+          "cue": "推起时胸肌把哑铃向上推拢,顶点有挤压感。",
+          "key": "肩胛收紧贴凳、腰自然弓(可塞一拳)、手腕中立;下放到大臂平行地面。",
+          "mistake": "手腕后仰、耸肩、用胸口弹起借力。",
+          "when": "有哑铃+躺面时"
+        },
+        {
+          "id": "chest-db-fly",
+          "mode": "哑铃",
+          "name": "哑铃飞鸟",
+          "gif": "assets/exercises/db-fly.gif",
+          "sets": "2",
+          "reps": "10-12",
+          "muscle": "胸大肌拉伸/中缝",
+          "cue": "像抱水桶一样张开,合拢时胸肌挤压。",
+          "key": "手肘微屈且角度固定,不锁死;全程 2-3 秒控制。",
+          "mistake": "把飞鸟做成卧推(手臂伸太直)、重量过大甩动。",
+          "when": "卧推后补一组拉伸"
+        },
+        {
+          "id": "chest-cable-fly",
+          "mode": "龙门架",
+          "name": "站姿绳索夹胸",
+          "gif": "assets/exercises/cable-fly.gif",
+          "sets": "2",
+          "reps": "12-15",
+          "muscle": "胸大肌(持续张力)",
+          "cue": "双手从两侧划弧向前上方合拢,胸肌全程有张力。",
+          "key": "微屈肘、身体略前倾、核心收紧;不要耸肩。",
+          "mistake": "重量过大身体晃、手肘锁死。",
+          "when": "龙门架高位/低位都能做"
+        }
       ]
     },
     {
-      "id": "B",
-      "day": "周三",
-      "title": "腿 · 腿/臀",
-      "exercises": [
-        { "name": "深蹲", "muscle": "腿", "sets": 3, "reps": "12-20", "note": "蹲到大腿平行地面;轻松了就背双肩包装书负重", "db": "哑铃高脚杯深蹲(双手托铃贴胸):10-15 次;这是哑铃腿训的王牌动作" },
-        { "name": "箭步蹲", "muscle": "腿", "sets": 2, "reps": "每侧10-12", "note": "前膝不超过脚尖,扶墙保持平衡", "db": "哑铃箭步蹲(双手垂铃在体侧):每侧 10 次;平衡好了负重加大" },
-        { "name": "单腿臀桥", "muscle": "臀", "sets": 3, "reps": "每侧10-15", "note": "肩胛靠凳/床,顶起时夹臀停1秒", "db": "哑铃罗马尼亚硬拉(双手垂铃):10-12 次;膝微屈、臀往后推,大腿后侧有拉伸感" },
-        { "name": "提踵", "muscle": "小腿", "sets": 2, "reps": "15-20", "note": "台阶上前脚掌踩边,幅度做满", "db": "一手一铃做提踵:15-20 次;幅度做满,顶点停 1 秒" }
+      "id": "shoulders",
+      "name": "肩",
+      "icon": "🎯",
+      "note": "推举为主;后束动作见「后束」组",
+      "variants": [
+        {
+          "id": "shoulders-pike",
+          "mode": "自重",
+          "name": "派克俯卧撑",
+          "gif": "assets/exercises/pike-pushup.gif",
+          "sets": "2",
+          "reps": "6-12",
+          "muscle": "三角肌前束 + 上胸",
+          "cue": "屈肘下放时前束/上胸发力,推起时肩膀前侧酸胀。",
+          "key": "髋部抬高成倒 V、头顶朝下;手肘朝后,不要外撇。",
+          "mistake": "塌腰、只动脖子、幅度太小。",
+          "when": "GIF 为瑜伽球版,轨迹相同;在家无器械时"
+        },
+        {
+          "id": "shoulders-db-press",
+          "mode": "哑铃",
+          "name": "哑铃肩上推举",
+          "gif": "assets/exercises/db-shoulder-press.gif",
+          "sets": "2",
+          "reps": "8-12",
+          "muscle": "三角肌前束 + 中束",
+          "cue": "把哑铃推离肩膀时,肩膀前上方发力。",
+          "key": "核心收紧、肋骨下沉、不耸肩、手腕中立。",
+          "mistake": "过度反弓腰、耸肩、推起后锁死肘。",
+          "when": "有哑铃时"
+        },
+        {
+          "id": "shoulders-cable-press",
+          "mode": "龙门架",
+          "name": "绳索肩推",
+          "gif": "assets/exercises/cable-shoulder-press.gif",
+          "sets": "2",
+          "reps": "10-12",
+          "muscle": "三角肌前束 + 中束",
+          "cue": "从肩高把绳索/手柄推向上方,三角肌前中束主导。",
+          "key": "站距稳定、核心收紧,不要用腿蹬借力。",
+          "mistake": "身体后仰、重量过大甩动。",
+          "when": "龙门架可调节高度"
+        }
       ]
     },
     {
-      "id": "C",
-      "day": "周五或周六",
-      "title": "拉 · 背/核心",
-      "exercises": [
-        { "name": "桌沿反向划船", "muscle": "背", "sets": 3, "reps": "8-12", "note": "躺进桌子下方,双手抓桌沿,身体拉成一条直线到胸触桌沿;太难就把脚往前伸(降低角度),太易就垫高脚", "db": "单臂哑铃划船(一手撑凳):每侧 10-12 次;背发力,不是手拉" },
-        { "name": "超人式", "muscle": "下背", "sets": 2, "reps": "12-15", "note": "俯卧,四肢离地停2秒", "db": "哑铃俯身双手划船(俯身 45°):10-12 次;腰背挺直,铃拉到腹侧" },
-        { "name": "反向飞鸟", "muscle": "肩", "sets": 2, "reps": "12-15", "note": "俯身,双手各拿一瓶满水矿泉水瓶,肩胛骨后缩;没瓶子就徒手做,慢一点也有刺激", "db": "哑铃俯身反向飞鸟(轻重量):12-15 次;肩胛骨先动,手臂只是挂钩" },
-        { "name": "平板支撑", "muscle": "核心", "sets": 3, "reps": "30-60秒", "note": "塌腰就提前结束,宁短勿歪", "db": "哑铃平板支撑划船(撑姿交替提铃):每侧 8-10 次;核心全程锁住不转髋" },
-        { "name": "毛巾弯举", "muscle": "二头", "sets": 2, "reps": "10-15", "note": "毛巾绕过小腿/桌子底下,单脚踩住一端对抗拉;可选动作,不练也行", "db": "哑铃弯举:10-12 次;肘固定在体侧,不借力晃动" }
+      "id": "triceps",
+      "name": "三头",
+      "icon": "💪",
+      "note": "推类动作已带到;单独补 1 个即可",
+      "variants": [
+        {
+          "id": "triceps-dip",
+          "mode": "自重",
+          "name": "凳上臂屈伸",
+          "gif": "assets/exercises/bench-dip.gif",
+          "sets": "2",
+          "reps": "10-15",
+          "muscle": "肱三头肌",
+          "cue": "下放时三头被拉长,撑起时三头收缩。",
+          "key": "肩膀下沉、肘朝后;下放到大臂接近平行地面。",
+          "mistake": "肩内旋疼痛、耸肩、下得太深。",
+          "when": "在家用椅子/床沿"
+        },
+        {
+          "id": "triceps-db-ext",
+          "mode": "哑铃",
+          "name": "哑铃颈后臂屈伸",
+          "gif": "assets/exercises/db-triceps-extension.gif",
+          "sets": "2",
+          "reps": "10-12",
+          "muscle": "肱三头肌(长头)",
+          "cue": "大臂垂直地面,前臂向后放下时三头拉伸,推回时收缩。",
+          "key": "肘夹紧朝前、不晃动;只动前臂。",
+          "mistake": "大臂前后晃、用重量甩。",
+          "when": "有哑铃时"
+        },
+        {
+          "id": "triceps-cable-pushdown",
+          "mode": "龙门架",
+          "name": "绳索下压",
+          "gif": "assets/exercises/cable-triceps-pushdown.gif",
+          "sets": "2",
+          "reps": "12-15",
+          "muscle": "肱三头肌",
+          "cue": "下压时三头收缩,回放时控制拉伸。",
+          "key": "肘贴身、身体略前倾、不要耸肩;压到手臂伸直不锁死。",
+          "mistake": "用身体重量下压、肘外撇。",
+          "when": "龙门架高位下拉"
+        }
+      ]
+    },
+    {
+      "id": "legs",
+      "name": "腿(股四)",
+      "icon": "🦵",
+      "note": "深蹲类;选 1 个主动作 + 箭步蹲",
+      "variants": [
+        {
+          "id": "legs-bodyweight-squat",
+          "mode": "自重",
+          "name": "徒手深蹲",
+          "gif": "assets/exercises/bodyweight-squat.gif",
+          "sets": "3",
+          "reps": "12-20",
+          "muscle": "股四头肌 + 臀",
+          "cue": "站起时脚跟蹬地、臀腿发力;下蹲时大腿前侧和臀部拉伸。",
+          "key": "脚尖略外、膝盖对准脚尖、蹲到大腿平行;胸口打开。",
+          "mistake": "膝盖内扣、脚跟离地、弯腰。",
+          "when": "在家/热身"
+        },
+        {
+          "id": "legs-db-goblet",
+          "mode": "哑铃",
+          "name": "哑铃高脚杯深蹲",
+          "gif": "assets/exercises/db-goblet-squat.gif",
+          "sets": "3",
+          "reps": "10-15",
+          "muscle": "股四头肌 + 臀",
+          "cue": "哑铃贴胸,用臀腿站起,大腿前侧主导。",
+          "key": "肘在身体内侧、脊柱中立;蹲到大腿平行或更低。",
+          "mistake": "前倾过多、膝盖内扣。",
+          "when": "哑铃腿训王牌"
+        },
+        {
+          "id": "legs-db-lunge",
+          "mode": "哑铃",
+          "name": "哑铃箭步蹲",
+          "gif": "assets/exercises/db-lunge.gif",
+          "sets": "2",
+          "reps": "每侧 10",
+          "muscle": "股四头肌 + 臀",
+          "cue": "前脚脚跟蹬地站起,臀腿发力。",
+          "key": "前膝不超过脚尖、躯干直立;后膝轻触地面。",
+          "mistake": "身体前倾、步幅太小。",
+          "when": "补单侧平衡"
+        }
+      ]
+    },
+    {
+      "id": "glutes-hams",
+      "name": "臀/后侧链",
+      "icon": "🍑",
+      "note": "臀桥 + 髋铰链;与腿日搭配",
+      "variants": [
+        {
+          "id": "glutes-bridge",
+          "mode": "自重",
+          "name": "单腿臀桥",
+          "gif": "assets/exercises/glute-bridge.gif",
+          "sets": "3",
+          "reps": "每侧 10-15",
+          "muscle": "臀大肌",
+          "cue": "顶起时臀大肌夹紧,不是腰。",
+          "key": "肩胛靠凳、核心收紧、髋充分伸展;顶点停 1 秒。",
+          "mistake": "过度挺腰、肋骨外翻。",
+          "when": "在家就能做"
+        },
+        {
+          "id": "glutes-db-rdl",
+          "mode": "哑铃",
+          "name": "哑铃罗马尼亚硬拉",
+          "gif": "assets/exercises/db-rdl.gif",
+          "sets": "2",
+          "reps": "10-12",
+          "muscle": "腘绳肌 + 臀大肌",
+          "cue": "臀往后推,大腿后侧被拉伸;站起时臀腿发力。",
+          "key": "膝微屈、背挺直、哑铃贴腿;髋主导,不是弯腰。",
+          "mistake": "圆背、蹲得太低变成深蹲。",
+          "when": "有哑铃时"
+        },
+        {
+          "id": "glutes-cable-legcurl",
+          "mode": "龙门架",
+          "name": "直腿弯举",
+          "gif": "assets/exercises/cable-leg-curl.gif",
+          "sets": "2",
+          "reps": "12-15",
+          "muscle": "腘绳肌",
+          "cue": "用大腿后侧把小腿拉向臀部。",
+          "key": "髋贴凳、只动膝关节;顶端收缩停 1 秒。",
+          "mistake": "用惯性甩、髋抬起。",
+          "when": "你的龙门架标注动作"
+        },
+        {
+          "id": "glutes-cable-pullthrough",
+          "mode": "龙门架",
+          "name": "高位扭腰(绳索胯下拉)",
+          "gif": "assets/exercises/cable-pullthrough.gif",
+          "sets": "2",
+          "reps": "12-15",
+          "muscle": "臀大肌 + 核心",
+          "cue": "屈髋向后坐,再用臀部向前顶髋站直。",
+          "key": "脊柱中立、核心锁住;髋关节铰链。",
+          "mistake": "弯腰、手臂拉绳借力。",
+          "when": "你的龙门架「高位扭腰」"
+        }
+      ]
+    },
+    {
+      "id": "calves",
+      "name": "小腿",
+      "icon": "🦶",
+      "note": "每次训练后顺手做",
+      "variants": [
+        {
+          "id": "calves-bodyweight",
+          "mode": "自重",
+          "name": "徒手提踵",
+          "gif": "assets/exercises/calf-raise.gif",
+          "sets": "2",
+          "reps": "15-20",
+          "muscle": "腓肠肌 + 比目鱼肌",
+          "cue": "小腿后侧收缩,把脚跟尽可能抬高。",
+          "key": "幅度做满、顶点停 1 秒、下放慢。",
+          "mistake": "用膝盖弹、幅度半程。",
+          "when": "台阶/马路沿"
+        },
+        {
+          "id": "calves-db",
+          "mode": "哑铃",
+          "name": "哑铃提踵",
+          "gif": "assets/exercises/db-calf-raise.gif",
+          "sets": "2",
+          "reps": "15-20",
+          "muscle": "腓肠肌 + 比目鱼肌",
+          "cue": "同徒手,负重后小腿后侧更酸。",
+          "key": "一手扶稳、幅度做满;顶点停 1 秒。",
+          "mistake": "身体晃、憋气。",
+          "when": "有哑铃时"
+        }
+      ]
+    },
+    {
+      "id": "back",
+      "name": "背",
+      "icon": "🔙",
+      "note": "拉类主动作;选 1-2 个",
+      "variants": [
+        {
+          "id": "back-inverted-row",
+          "mode": "自重",
+          "name": "桌沿反向划船",
+          "gif": "assets/exercises/inverted-row.gif",
+          "sets": "3",
+          "reps": "8-12",
+          "muscle": "背阔肌 + 斜方肌中下束",
+          "cue": "用背肌把胸拉向桌沿,手臂只是挂钩。",
+          "key": "肩胛后缩下沉、身体一条直线;拉到胸触桌沿。",
+          "mistake": "耸肩、只用手臂拉、髋下沉。",
+          "when": "在家用桌子"
+        },
+        {
+          "id": "back-db-row",
+          "mode": "哑铃",
+          "name": "单臂哑铃划船",
+          "gif": "assets/exercises/db-row.gif",
+          "sets": "3",
+          "reps": "每侧 10-12",
+          "muscle": "背阔肌 + 斜方肌 + 后束",
+          "cue": "肘往天花板方向拉,背阔肌/斜方肌下束发力。",
+          "key": "支撑手稳、脊柱中立、不转髋;顶点肘高于背、停 1 秒。",
+          "mistake": "腰甩、耸肩、重量过大(12.5kg 后段变形就降重)。",
+          "when": "有哑铃+凳子时"
+        },
+        {
+          "id": "back-cable-row",
+          "mode": "龙门架",
+          "name": "低位划船",
+          "gif": "assets/exercises/cable-row.gif",
+          "sets": "3",
+          "reps": "10-12",
+          "muscle": "背阔肌 + 斜方肌",
+          "cue": "用背把把手拉向腹部,肩胛后缩。",
+          "key": "躯干直立、核心收紧;拉时肘贴身。",
+          "mistake": "后仰借力、耸肩。",
+          "when": "你的龙门架「低位划船」"
+        },
+        {
+          "id": "back-pullup",
+          "mode": "龙门架",
+          "name": "引体向上",
+          "gif": "assets/exercises/pullup.gif",
+          "sets": "2",
+          "reps": "尽力",
+          "muscle": "背阔肌 + 二头 + 核心",
+          "cue": "用背肌把身体拉起,想象肘往下压。",
+          "key": "肩胛下沉启动、核心收紧、不要摆腿借力。",
+          "mistake": "只用手臂、半程、耸肩。",
+          "when": "你的龙门架有引体杆"
+        }
+      ]
+    },
+    {
+      "id": "rear-delts",
+      "name": "后束/上背",
+      "icon": "🪶",
+      "note": "圆肩改善 + 划船后的肩后侧",
+      "variants": [
+        {
+          "id": "rear-db-fly",
+          "mode": "哑铃",
+          "name": "哑铃俯身反向飞鸟",
+          "gif": "assets/exercises/db-reverse-fly.gif",
+          "sets": "2",
+          "reps": "12-15",
+          "muscle": "三角肌后束 + 斜方肌",
+          "cue": "肩胛后缩,后束把手臂向两侧抬起。",
+          "key": "俯身背平、手臂微屈;抬到肩高停 1 秒。",
+          "mistake": "重量过大变成斜方肌/腰借力(一定用轻重量)。",
+          "when": "有小哑铃时"
+        },
+        {
+          "id": "rear-cable-fly",
+          "mode": "龙门架",
+          "name": "高位绳索反向飞鸟/面拉",
+          "gif": "assets/exercises/cable-reverse-fly.gif",
+          "sets": "2",
+          "reps": "12-15",
+          "muscle": "三角肌后束 + 肩袖",
+          "cue": "绳索向脸侧拉开,后束+上背收缩,前臂外旋。",
+          "key": "肘高于手腕、拉到耳朵两侧;不耸肩。",
+          "mistake": "重量过大、身体后仰。",
+          "when": "你的龙门架「高位飞鸟」"
+        }
+      ]
+    },
+    {
+      "id": "core",
+      "name": "核心",
+      "icon": "🧘",
+      "note": "每次训练收尾",
+      "variants": [
+        {
+          "id": "core-plank",
+          "mode": "自重",
+          "name": "平板支撑",
+          "gif": "assets/exercises/plank.gif",
+          "sets": "3",
+          "reps": "30-60 秒",
+          "muscle": "腹横肌 + 全核心",
+          "cue": "肚脐往脊柱方向收,全身一条直线。",
+          "key": "肘在肩下、不塌腰、不撅臀;正常呼吸。",
+          "mistake": "塌腰、憋气、臀太高。",
+          "when": "GIF 为负重版,动作相同;在家"
+        },
+        {
+          "id": "core-cable-crunch",
+          "mode": "龙门架",
+          "name": "绳索卷腹",
+          "gif": "assets/exercises/cable-crunch.gif",
+          "sets": "2",
+          "reps": "12-15",
+          "muscle": "腹直肌",
+          "cue": "用腹部把胸口拉向骨盆,不是用手拉绳。",
+          "key": "下背保持中立、动作慢;回放时控制。",
+          "mistake": "用手臂发力、下背反弓。",
+          "when": "龙门架高位绳索"
+        }
+      ]
+    },
+    {
+      "id": "biceps",
+      "name": "二头",
+      "icon": "💪",
+      "note": "拉类已带到;可选",
+      "variants": [
+        {
+          "id": "biceps-bodyweight",
+          "mode": "自重",
+          "name": "徒手/毛巾弯举",
+          "gif": "assets/exercises/bodyweight-curl.gif",
+          "sets": "2",
+          "reps": "10-15",
+          "muscle": "肱二头肌",
+          "cue": "前臂向上弯时二头收缩,下放时拉伸。",
+          "key": "肘固定在体侧,不借力晃动。",
+          "mistake": "身体后仰借力、动作过快。",
+          "when": "在家用毛巾/弹力带"
+        },
+        {
+          "id": "biceps-db-curl",
+          "mode": "哑铃",
+          "name": "哑铃弯举",
+          "gif": "assets/exercises/db-curl.gif",
+          "sets": "2",
+          "reps": "10-12",
+          "muscle": "肱二头肌",
+          "cue": "弯举时二头鼓起,顶端轻旋前臂。",
+          "key": "肘固定在体侧,不晃动;下放 2-3 秒。",
+          "mistake": "用腰甩、只做半程。",
+          "when": "有哑铃时"
+        },
+        {
+          "id": "biceps-cable-curl",
+          "mode": "龙门架",
+          "name": "绳索弯举",
+          "gif": "assets/exercises/cable-curl.gif",
+          "sets": "2",
+          "reps": "12-15",
+          "muscle": "肱二头肌",
+          "cue": "持续张力下二头收缩,顶峰更明显。",
+          "key": "肘贴身、身体不后仰;回放到底。",
+          "mistake": "用身体后仰借力、肘前移。",
+          "when": "龙门架低位"
+        }
       ]
     }
   ],
@@ -76,5 +527,6 @@
     "蛋白优先:每餐先定「一掌大块肉/蛋/奶」,再配主食和菜——蛋白是硬指标,别的可以浮动",
     "外食控油:超标日几乎都是外食油——点蒸/煮/白灼/清炒,酱汁 separate;奶油、炸、干煸、水煮(油煮)绕行",
     "餐间分配:晚上活动少但练后合成窗口在,碳水挪到练后那顿;不练的晚上碳水减半拳,蛋白不减"
-  ]
+  ],
+  "gifSource": "ExerciseGymGifsDB (public domain, CC0) + ExerciseDB;本地存放 assets/exercises/"
 }

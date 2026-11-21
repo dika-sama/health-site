@@ -125,6 +125,36 @@
   .note .t { font-weight: 600; font-size: 14px; }
   .note .c { font-size: 14px; margin-top: 2px; white-space: pre-wrap; }
   .empty { color: var(--muted); font-size: 14px; padding: 20px 0; text-align: center; }
+  /* 训练页:肌群分组 + 横排动作卡(GIF/发力提示/点选) */
+  .train-filter { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .train-filter button {
+    border: 1px solid var(--border); background: var(--card); color: var(--muted);
+    border-radius: 999px; padding: 5px 14px; font-size: 12px; cursor: pointer;
+  }
+  .train-filter button.active { background: var(--accent-soft); color: var(--accent); border-color: #f3caca; }
+  .muscle-group { margin-bottom: 18px; }
+  .muscle-group.hidden { display: none; }
+  .muscle-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+  .muscle-head h3 { font-size: 15px; }
+  .muscle-head .note { font-size: 11px; color: var(--muted); }
+  .variant-row { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x mandatory; }
+  .variant-card {
+    flex: 0 0 280px; border: 1px solid var(--border); border-radius: 12px; padding: 10px;
+    background: var(--card); scroll-snap-align: start; cursor: pointer;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .variant-card:hover { border-color: #f3caca; }
+  .variant-card.picked { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); background: #fffafa; }
+  .variant-gif { width: 100%; height: 150px; object-fit: contain; background: #f7f7f8; border-radius: 8px; display: block; }
+  .variant-mode { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); margin: 8px 0 4px; }
+  .variant-name { font-size: 14px; font-weight: 600; }
+  .variant-dose { font-size: 12px; color: var(--muted); margin-left: 6px; font-weight: 400; }
+  .variant-muscle { font-size: 11px; color: var(--muted); margin: 2px 0 6px; }
+  .variant-cue, .variant-key, .variant-mistake { font-size: 12px; line-height: 1.6; margin: 4px 0; }
+  .variant-cue b, .variant-key b { color: var(--accent); }
+  .variant-mistake { color: #9a6a00; }
+  .variant-when { font-size: 11px; color: var(--muted); margin-top: 6px; border-top: 1px dashed var(--border); padding-top: 5px; }
+  .variant-pick { font-size: 11px; color: var(--accent); font-weight: 600; margin-top: 6px; text-align: right; }
   footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 40px; }
   @media (max-width: 600px) { .chart-box { height: 200px; } }
   /* 大屏行式布局:图略升高度 */
@@ -155,7 +185,8 @@
     <button class="page-tab" data-page="body">数据</button>
     <button class="page-tab" data-page="notes">知识库</button>
     <button class="page-tab" data-page="review">Review</button>
-    <button class="page-tab" data-page="training">训练与饮食</button>
+    <button class="page-tab" data-page="training">训练</button>
+    <button class="page-tab" data-page="diet">饮食</button>
     <button class="page-tab" data-page="settings">设置</button>
   </div>
 
@@ -261,13 +292,29 @@
     </div>
   </div>
 
-  <!-- ============ 训练与饮食页:训练计划(静态全展) + 饮食执行;打卡与周组数核对归 Review/数据页 ============ -->
+  <!-- ============ 训练页:按肌群横排选动作(GIF+发力提示);打卡与周组数核对归 Review/数据页 ============ -->
   <div class="page" id="page-training">
     <div class="card">
-      <h2>🏋️ 训练计划(A推 · B腿 · C拉)</h2>
+      <h2>🏋️ 训练动作库(按肌群选)</h2>
       <div class="hint" id="trainingTargetHint"></div>
-      <div id="sessionsBox"></div>
+      <div class="train-filter" id="trainFilter">
+        <button data-mode="all" class="active">全部器械</button>
+        <button data-mode="自重">自重</button>
+        <button data-mode="哑铃">哑铃</button>
+        <button data-mode="龙门架">龙门架</button>
+      </div>
+      <div id="groupsBox"></div>
+      <div class="hint" id="gifCredit" style="margin-top:10px"></div>
     </div>
+    <div class="card">
+      <h2>💡 训练执行规则</h2>
+      <div class="hint">强度判断 / 安排间隔 / 进退标准</div>
+      <div id="trainingRules"></div>
+    </div>
+  </div>
+
+  <!-- ============ 饮食页:三餐 + 饮食规则 ============ -->
+  <div class="page" id="page-diet">
     <div class="card">
       <h2>🍽️ 三餐怎么吃</h2>
       <div class="hint">配平目标:蛋白 120-140g / 碳水 220g / 脂肪 65g ≈ 1950-2050 kcal;先定蛋白,再配主食和菜</div>
@@ -277,10 +324,9 @@
       </table></div>
     </div>
     <div class="card">
-      <h2>💡 执行规则</h2>
-      <div class="hint">训练比计划更重要,饮食比训练更容易破——四条规则</div>
-      <div id="trainingRules"></div>
-      <div id="mealRules" style="margin-top:10px"></div>
+      <h2>💡 饮食规则</h2>
+      <div class="hint">蛋白优先,外食控油,练后加碳水</div>
+      <div id="mealRules"></div>
     </div>
   </div>
 
@@ -765,42 +811,68 @@ function renderNotes(items) {
   show(sorted[0]);
 }
 
-/* ---------- 训练与饮食页:静态全展训练计划(无列表选择/无打卡/无周组数核对,后两者归 Review 与数据页) ---------- */
+/* ---------- 训练页:按肌群横排选动作(GIF+发力提示);饮食拆到独立页 ---------- */
+const TRAIN_PICK_KEY = 'healthsite_training_picks_v1';
 function renderTraining(training) {
-  if (!training || !training.sessions || !training.sessions.length) return;
-  const t = training.target;
-  const sessions = training.sessions.slice();
-  const hasDb = sessions.some(s => s.exercises.some(e => e.db));
-  let equip = '自重';
-  const baseHint = `每周 ${t.sessionsPerWeek} 次 · 每肌群周 ${t.setsPerMusclePerWeek.min}-${t.setsPerMusclePerWeek.max} 组(维持剂量)`;
-  const renderAll = () => {
-    const useDb = equip === '哑铃';
-    document.getElementById('sessionsBox').innerHTML = sessions.map(s => `<div style="margin-bottom:14px">
-      <div style="font-size:13px;font-weight:600;margin-bottom:6px">${s.id} · ${s.title} <span style="color:var(--muted);font-weight:400">${s.day} · 总计 ${s.exercises.reduce((a, e) => a + e.sets, 0)} 组</span></div>
-      <div class="scroll"><table>
-        <thead><tr><th>动作${useDb ? '(哑铃版)' : ''}</th><th>肌群</th><th>组数</th><th>次数</th><th>要点</th></tr></thead>
-        <tbody>${s.exercises.map(e => `<tr>
-          <td>${useDb && e.db ? e.name.split('(')[0] + ' → ' + e.db.split(':')[0] : e.name}</td>
-          <td>${e.muscle}</td><td class="num">${e.sets}</td><td>${e.reps}</td>
-          <td style="font-size:12px;color:var(--muted)">${useDb && e.db ? (e.db.split(':').slice(1).join(':') || e.db) : (e.note || '')}</td>
-        </tr>`).join('')}</tbody>
-      </table></div>
-    </div>`).join('');
-    // 模式切换按钮(有哑铃数据时才显示)
-    document.getElementById('trainingTargetHint').innerHTML = baseHint + (hasDb
-      ? ` &nbsp;<button id="equipBtn" style="border:1px solid var(--border);background:${equip === '哑铃' ? 'var(--accent-soft)' : 'var(--card)'};color:${equip === '哑铃' ? 'var(--accent)' : 'var(--muted)'};border-radius:999px;padding:3px 12px;font-size:12px;cursor:pointer">dumbbell模式:切换为${equip === '哑铃' ? '自重' : '哑铃'}版</button>`
-      : '');
-    const btn = document.getElementById('equipBtn');
-    if (btn) btn.onclick = () => { equip = equip === '哑铃' ? '自重' : '哑铃'; renderAll(); };
+  if (!training || !training.groups || !training.groups.length) return;
+  const t = training.target || {};
+  const dose = t.setsPerMusclePerWeek || { min: 4, max: 6 };
+  document.getElementById('trainingTargetHint').textContent =
+    `每周 ${t.sessionsPerWeek || 3} 次 · 每肌群周 ${dose.min}-${dose.max} 组(维持剂量) · 按当天器械选 1 个动作,每个 2-3 组;点卡片选「今天用这个」(仅存在本机浏览器)`;
+  let picks = {};
+  try { picks = JSON.parse(localStorage.getItem(TRAIN_PICK_KEY) || '{}') || {}; } catch (e) {}
+  let mode = 'all';
+  const groupsEl = document.getElementById('groupsBox');
+  const render = () => {
+    groupsEl.innerHTML = training.groups.map(g => {
+      const variants = g.variants || [];
+      const shown = mode === 'all' ? variants : variants.filter(x => x.mode === mode);
+      if (!shown.length) return '';
+      return `<div class="muscle-group" data-group="${g.id}">
+        <div class="muscle-head"><h3>${g.icon || ''} ${g.name}</h3><span class="note">${g.note || ''}</span></div>
+        <div class="variant-row">${shown.map(x => {
+          const picked = picks[g.id] === x.id;
+          return `<div class="variant-card${picked ? ' picked' : ''}" data-group="${g.id}" data-id="${x.id}">
+            <img class="variant-gif" src="${x.gif}" alt="${x.name}" loading="lazy">
+            <span class="variant-mode">${x.mode}</span>
+            <div class="variant-name">${x.name}<span class="variant-dose">${x.sets}组 × ${x.reps}</span></div>
+            <div class="variant-muscle">${x.muscle || ''}</div>
+            <div class="variant-cue"><b>发力:</b>${x.cue || ''}</div>
+            <div class="variant-key"><b>核心:</b>${x.key || ''}</div>
+            ${x.mistake ? `<div class="variant-mistake"><b>别:</b>${x.mistake}</div>` : ''}
+            ${x.when ? `<div class="variant-when">${x.when}</div>` : ''}
+            <div class="variant-pick">${picked ? '✓ 今天用这个' : '点选今天用这个'}</div>
+          </div>`;
+        }).join('')}</div>
+      </div>`;
+    }).join('');
+    groupsEl.querySelectorAll('.variant-card').forEach(card => card.onclick = () => {
+      const gid = card.dataset.group, vid = card.dataset.id;
+      if (picks[gid] === vid) delete picks[gid]; else picks[gid] = vid;
+      try { localStorage.setItem(TRAIN_PICK_KEY, JSON.stringify(picks)); } catch (e) {}
+      render();
+    });
   };
-  renderAll();
+  document.getElementById('trainFilter').querySelectorAll('button').forEach(btn => btn.onclick = () => {
+    mode = btn.dataset.mode;
+    document.querySelectorAll('#trainFilter button').forEach(b => b.classList.toggle('active', b === btn));
+    render();
+  });
+  render();
+  const credit = document.getElementById('gifCredit');
+  if (credit) credit.textContent = 'GIF 来源:' + (training.gifSource || 'ExerciseGymGifsDB / ExerciseDB');
   document.getElementById('trainingRules').innerHTML = `<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9">
-    <li><b>强度判断:</b>每组做到「还能再做 2 次」就停下;能轻松做满上限次数,下次就加难度(垫高脚/负重/换更难变式)</li>
-    <li><b>安排间隔:</b>同一肌群两次训练间隔 ≥48 小时(周一推/周三腿/周五拉正好错开);缺了就跳过,不顺延堆积</li>
+    <li><b>强度判断:</b>每组做到「还能再做 2 次」(2-3 RIR)就停下;能轻松做满上限次数,下次加难度/加 2.5kg</li>
+    <li><b>安排间隔:</b>同一肌群两次训练间隔 ≥48 小时;缺了就跳过,不顺延堆积</li>
     <li><b>酸痛判读:</b>新动作后 24-48h 的酸痛(DOMS)= 正常,不作为加练理由;关节刺痛 = 停,肌肉酸痛 = 可轻量继续</li>
     <li><b>进退标准:</b>动作能标准做满上限 → 升级难度;做不到下限 → 降级难度,动作质量优先于次数</li>
+    <li><b>选动作:</b>同一肌群一次只选一个变式(如胸:俯卧撑/哑铃卧推/龙门架夹胸三选一),2-3 组即可;不同肌群的变式可自由组合</li>
   </ul>`;
-  // 三餐表 + 饮食规则
+}
+
+/* ---------- 饮食页:三餐表 + 饮食规则 ---------- */
+function renderMeals(training) {
+  if (!training) return;
   if (training.meals && training.meals.length) {
     document.querySelector('#mealTable tbody').innerHTML = training.meals.map(m => `<tr>
       <td><b>${m.slot}</b></td><td class="num">${m.protein}</td><td class="num">${m.kcal}</td>
@@ -808,7 +880,7 @@ function renderTraining(training) {
     </tr>`).join('');
   }
   if (training.mealRules && training.mealRules.length) {
-    document.getElementById('mealRules').innerHTML = `<div class="hint" style="margin-bottom:4px">🍽️ 饮食四条</div><ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9">
+    document.getElementById('mealRules').innerHTML = `<ul style="margin:0;padding-left:18px;font-size:13px;line-height:1.9">
       ${training.mealRules.map(r => `<li>${r}</li>`).join('')}
     </ul>`;
   }
@@ -1272,6 +1344,7 @@ function renderReview(rows, daily, goals, trainLog, training) {
     step('notes', () => renderNotes(knowledge));
     step('settings', () => renderSettings(goals));
     step('training', () => renderTraining(training));
+    step('meals', () => renderMeals(training));
     const last = rows.length ? rows[rows.length - 1].date : '';
     document.getElementById('updated').textContent = last ? `最近记录 ${last}` : '';
     document.getElementById('updated2').textContent = last;
