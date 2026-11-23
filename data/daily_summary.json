@@ -530,5 +530,11 @@
     "restingHR": 56,
     "respRate": 15.3,
     "sleepHours": 8.08
+  },
+  "2026-11-23": {
+    "dietaryKcal": 1473,
+    "dietaryProtein": 116,
+    "dietaryCarbs": 120,
+    "dietaryFat": 52
   }
 }
