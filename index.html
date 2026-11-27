@@ -536,35 +536,70 @@ function goalDataset(g, goals) {
   return lines;
 }
 
-/* ---------- 实测趋势线:最小二乘拟合,消除逐日波动看方向 ---------- */
+/* ---------- 实测趋势线:三次多项式最小二乘拟合,消除逐日波动看走向 ---------- */
 // 2026-11-27 加入:BIA 逐日波动大(水分/糖原),单看连线辨不出趋势。
-// 对全部实测点做一次线性拟合(y = a + b*n,n=自首日起天数),画成与实测同色、更细的点线。
+// 2026-11-27 二次修订:直线 → 三次多项式。训练启动/平台期这类「斜率变化」是真实信号,
+//   直线会把它们拉平;三次曲线允许一个拐点,正好表达「先平台后加速」。次数再高会反过来
+//   追逐 BIA 逐日噪声,失去趋势意义,故封顶 3 次。点太少时降级:>=8 点用三次,>=5 点用直线。
+// 求解正规方程 (AᵀA)c = Aᵀy,高斯消元;日期归一化到 [0,1](n/总天数)防病态矩阵。
 // 体脂率等派生指标同样适用(拟合的是 derived 后的占比序列)。
 function trendDataset(rows, color) {
   const pts = rows.filter(r => r.y != null && isFinite(r.y));
   if (pts.length < 5) return null;   // 点太少拟合无意义
   const t0 = new Date(pts[0].x + 'T00:00:00').getTime();
-  let sx = 0, sy = 0, sxx = 0, sxy = 0;
-  pts.forEach(r => {
-    const n = (new Date(r.x + 'T00:00:00').getTime() - t0) / 86400e3;
-    sx += n; sy += r.y; sxx += n * n; sxy += n * r.y;
+  const tN = new Date(pts[pts.length - 1].x + 'T00:00:00').getTime();
+  const span = Math.max(1, (tN - t0) / 86400e3);
+  const xs = pts.map(r => (new Date(r.x + 'T00:00:00').getTime() - t0) / 86400e3 / span);
+  const deg = pts.length >= 8 ? 3 : 1;
+  // 正规方程:M[k][j] = Σ x^(j+k), v[k] = Σ y*x^k
+  const M = [], v = [];
+  for (let k = 0; k <= deg; k++) {
+    M.push(new Array(deg + 1).fill(0));
+    v.push(0);
+  }
+  pts.forEach((r, i) => {
+    const y = r.y;
+    for (let k = 0; k <= deg; k++) {
+      for (let j = 0; j <= deg; j++) M[k][j] += Math.pow(xs[i], j + k);
+      v[k] += y * Math.pow(xs[i], k);
+    }
   });
-  const N = pts.length;
-  const denom = N * sxx - sx * sx;
-  if (!denom) return null;
-  const b = (N * sxy - sx * sy) / denom;
-  const a = (sy - b * sx) / N;
+  // 高斯消元(部分主元)
+  for (let col = 0; col <= deg; col++) {
+    let piv = col;
+    for (let r2 = col + 1; r2 <= deg; r2++) if (Math.abs(M[r2][col]) > Math.abs(M[piv][col])) piv = r2;
+    if (Math.abs(M[piv][col]) < 1e-12) return null;
+    [M[col], M[piv]] = [M[piv], M[col]];
+    [v[col], v[piv]] = [v[piv], v[col]];
+    for (let r2 = col + 1; r2 <= deg; r2++) {
+      const f = M[r2][col] / M[col][col];
+      for (let j = col; j <= deg; j++) M[r2][j] -= f * M[col][j];
+      v[r2] -= f * v[col];
+    }
+  }
+  const c = new Array(deg + 1).fill(0);
+  for (let k = deg; k >= 0; k--) {
+    let s = v[k];
+    for (let j = k + 1; j <= deg; j++) s -= M[k][j] * c[j];
+    c[k] = s / M[k][k];
+  }
+  const evalAt = u => c.reduce((s, ck, k) => s + ck * Math.pow(u, k), 0);
+  // 采样 ~40 个点,平滑表达曲率;末端点精确落位
+  const SAMPLES = 40;
+  const data = [];
+  for (let i = 0; i <= SAMPLES; i++) {
+    const u = i / SAMPLES;
+    data.push({ x: fmtLocal(new Date(t0 + u * (tN - t0))), y: evalAt(u) });
+  }
+  const lastPt = pts[pts.length - 1];
   return {
-    label: '趋势 ' + fmt(a + b * ((new Date(pts[pts.length - 1].x + 'T00:00:00').getTime() - t0) / 86400e3)),
-    data: [
-      { x: pts[0].x, y: a },
-      { x: pts[pts.length - 1].x, y: a + b * ((new Date(pts[pts.length - 1].x + 'T00:00:00').getTime() - t0) / 86400e3) },
-    ],
+    label: '趋势 ' + fmt(evalAt(1)),
+    data: data,
     borderColor: color + 'aa',
     borderDash: [2, 3],
     borderWidth: 1.5,
     pointRadius: 0,
-    tension: 0,
+    tension: 0,          // 采样点足够密,无需再让 Chart.js 加平滑
     fill: false,
   };
 }
