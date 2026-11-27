@@ -525,7 +525,7 @@ function goalDataset(g, goals) {
     lines.push({
       label: '目标线 ' + fmt(g.to),
       data: mkPts(g.from, g.to),
-      borderColor: METRICS[g.metric].color + '88',
+      borderColor: '#9aa0a6cc',   // 灰色虚线:与柱状图标准线统一;原同色半透明压在实测线下看不见
       borderDash: [6, 6],
       borderWidth: 2,
       pointRadius: 0,
@@ -534,6 +534,39 @@ function goalDataset(g, goals) {
     });
   }
   return lines;
+}
+
+/* ---------- 实测趋势线:最小二乘拟合,消除逐日波动看方向 ---------- */
+// 2026-11-27 加入:BIA 逐日波动大(水分/糖原),单看连线辨不出趋势。
+// 对全部实测点做一次线性拟合(y = a + b*n,n=自首日起天数),画成与实测同色、更细的点线。
+// 体脂率等派生指标同样适用(拟合的是 derived 后的占比序列)。
+function trendDataset(rows, color) {
+  const pts = rows.filter(r => r.y != null && isFinite(r.y));
+  if (pts.length < 5) return null;   // 点太少拟合无意义
+  const t0 = new Date(pts[0].x + 'T00:00:00').getTime();
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  pts.forEach(r => {
+    const n = (new Date(r.x + 'T00:00:00').getTime() - t0) / 86400e3;
+    sx += n; sy += r.y; sxx += n * n; sxy += n * r.y;
+  });
+  const N = pts.length;
+  const denom = N * sxx - sx * sx;
+  if (!denom) return null;
+  const b = (N * sxy - sx * sy) / denom;
+  const a = (sy - b * sx) / N;
+  return {
+    label: '趋势 ' + fmt(a + b * ((new Date(pts[pts.length - 1].x + 'T00:00:00').getTime() - t0) / 86400e3)),
+    data: [
+      { x: pts[0].x, y: a },
+      { x: pts[pts.length - 1].x, y: a + b * ((new Date(pts[pts.length - 1].x + 'T00:00:00').getTime() - t0) / 86400e3) },
+    ],
+    borderColor: color + 'aa',
+    borderDash: [2, 3],
+    borderWidth: 1.5,
+    pointRadius: 0,
+    tension: 0,
+    fill: false,
+  };
 }
 
 /* ---------- 三张独立趋势图 ---------- */
@@ -587,12 +620,14 @@ function renderMetricChart(metric, rowsRaw, goals) {
   };
   const goalLines = [];
   (goals || []).filter(x => x.metric === metric).forEach(x => goalDataset(x, goals).forEach(d => goalLines.push(d)));
+  // 实测趋势线(最小二乘):插在 datasets 首位之后由 renderMetricChart 统一拼装
+  const trend = trendDataset(rows.map(r => ({ x: r.date, y: r[metric] })), m.color);
   const canvas = document.getElementById(m.chart);
   if (!canvas) return;
   if (charts[metric]) { charts[metric].destroy(); }
   charts[metric] = new Chart(canvas, {
     type: 'line',
-    data: { datasets: [actual, ...goalLines] },
+    data: { datasets: trend ? [actual, trend, ...goalLines] : [actual, ...goalLines] },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'nearest', intersect: false },
