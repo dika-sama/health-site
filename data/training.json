@@ -5,7 +5,7 @@
       "min": 4,
       "max": 6
     },
-    "note": "维持肌肉的最低有效剂量:大肌群每周 4-6 组,分散到 3 次训练(同一肌群间隔 ≥48h);每个肌群从 variants 里按当日器械选 1 个动作,每个动作 2-3 组即可"
+    "note": "维持肌肉的最低有效剂量:大肌群每周 4-6 组,分散到 3 次训练(同一肌群间隔 ≥48h);每个肌群从 variants 里按当日器械选 1 个动作,每个动作 2-3 组即可。2026-11-28 调版:肩/三头/后束/小腿/二头 2→3 组(周剂量达 4 组维护线);新增史密斯机模式(卧推/肩推/窄距卧推)与双臂划船、面拉"
   },
   "sessions": [
     {
@@ -18,7 +18,8 @@
           "variant": "chest-pushup",
           "byMode": {
             "哑铃": "chest-db-press",
-            "龙门架": "chest-cable-fly"
+            "龙门架": "chest-cable-fly",
+            "史密斯机": "chest-smith-press"
           }
         },
         {
@@ -36,7 +37,8 @@
           "variant": "shoulders-pike",
           "byMode": {
             "哑铃": "shoulders-db-press",
-            "龙门架": "shoulders-cable-press"
+            "龙门架": "shoulders-cable-press",
+            "史密斯机": "shoulders-smith-press"
           }
         },
         {
@@ -44,7 +46,8 @@
           "variant": "triceps-dip",
           "byMode": {
             "哑铃": "triceps-db-ext",
-            "龙门架": "triceps-cable-pushdown"
+            "龙门架": "triceps-cable-pushdown",
+            "史密斯机": "triceps-smith-ext"
           }
         }
       ]
@@ -101,6 +104,13 @@
             "哑铃": "back-db-row",
             "龙门架": "back-cable-row"
           }
+        },
+        {
+          "group": "back",
+          "variant": "back-db-row-both",
+          "modes": [
+            "哑铃"
+          ]
         },
         {
           "group": "lower-back",
@@ -210,6 +220,19 @@
           "key": "微屈肘、身体略前倾、核心收紧;不要耸肩、不要转髋借力。",
           "mistake": "重量过大身体晃、手肘锁死。",
           "when": "龙门架单手把手/绳索都能做"
+        },
+        {
+          "id": "chest-smith-press",
+          "mode": "史密斯机",
+          "name": "史密斯机卧推",
+          "gif": "assets/exercises/smith-bench-press.gif",
+          "sets": "3",
+          "reps": "8-12",
+          "muscle": "胸大肌 + 前束",
+          "cue": "下放到中胸,推起时胸发力,肩胛骨后收贴凳。",
+          "key": "挂钩旋转方向要熟;脚踩稳,臀部不离开凳。",
+          "mistake": "下放过深弹震、手肘完全外展成一条线。",
+          "when": "史密斯机(有保护挂钩,单人可冲重量)"
         }
       ]
     },
@@ -224,7 +247,7 @@
           "mode": "自重",
           "name": "派克俯卧撑",
           "gif": "assets/exercises/pike-pushup.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "6-12",
           "muscle": "三角肌前束 + 上胸",
           "cue": "屈肘下放时前束/上胸发力,推起时肩膀前侧酸胀。",
@@ -237,7 +260,7 @@
           "mode": "哑铃",
           "name": "哑铃肩上推举",
           "gif": "assets/exercises/db-shoulder-press.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "8-12",
           "muscle": "三角肌前束 + 中束",
           "cue": "把哑铃推离肩膀时,肩膀前上方发力。",
@@ -250,13 +273,26 @@
           "mode": "龙门架",
           "name": "绳索肩推",
           "gif": "assets/exercises/cable-shoulder-press.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "10-12",
           "muscle": "三角肌前束 + 中束",
           "cue": "从肩高把绳索/手柄推向上方,三角肌前中束主导。",
           "key": "站距稳定、核心收紧,不要用腿蹬借力。",
           "mistake": "身体后仰、重量过大甩动。",
           "when": "龙门架可调节高度"
+        },
+        {
+          "id": "shoulders-smith-press",
+          "mode": "史密斯机",
+          "name": "史密斯机站立肩推",
+          "gif": "assets/exercises/smith-shoulder-press.gif",
+          "sets": "3",
+          "reps": "8-10",
+          "muscle": "三角肌前束 + 中束",
+          "cue": "杆落在锁骨前方,推起时肩前上方发力,头后避杆。",
+          "key": "站位在杆正下方稍前;下放到下巴/锁骨高度,小臂垂直。",
+          "mistake": "站到杆后侧导致腰部代偿、耸肩借力。",
+          "when": "史密斯机:力竭可旋转挂钩,单人安全(当前主力肩推动作)"
         }
       ]
     },
@@ -271,7 +307,7 @@
           "mode": "自重",
           "name": "凳上臂屈伸",
           "gif": "assets/exercises/bench-dip.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "10-15",
           "muscle": "肱三头肌",
           "cue": "下放时三头被拉长,撑起时三头收缩。",
@@ -284,7 +320,7 @@
           "mode": "哑铃",
           "name": "哑铃颈后臂屈伸",
           "gif": "assets/exercises/db-triceps-extension.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "10-12",
           "muscle": "肱三头肌(长头)",
           "cue": "大臂垂直地面,前臂向后放下时三头拉伸,推回时收缩。",
@@ -297,13 +333,26 @@
           "mode": "龙门架",
           "name": "绳索下压",
           "gif": "assets/exercises/cable-triceps-pushdown.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "12-15",
           "muscle": "肱三头肌",
           "cue": "下压时三头收缩,回放时控制拉伸。",
           "key": "肘贴身、身体略前倾、不要耸肩;压到手臂伸直不锁死。",
           "mistake": "用身体重量下压、肘外撇。",
           "when": "龙门架高位下拉"
+        },
+        {
+          "id": "triceps-smith-ext",
+          "mode": "史密斯机",
+          "name": "史密斯机窄距卧推",
+          "gif": "assets/exercises/smith-close-grip.gif",
+          "sets": "3",
+          "reps": "8-12",
+          "muscle": "三头",
+          "cue": "窄握,肘贴身,下放到下胸,三头发力推起。",
+          "key": "小臂尽量垂直;重量比常规卧推轻 20-30%。",
+          "mistake": "肘外撇变成胸动作、手腕后折。",
+          "when": "史密斯机:三头孤立冲负荷的安全选择"
         }
       ]
     },
@@ -425,7 +474,7 @@
           "mode": "自重",
           "name": "超人式/反向挺身",
           "gif": "assets/exercises/back-extension.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "12-15",
           "muscle": "竖脊肌 + 臀大肌 + 核心",
           "cue": "发力感:俯卧时下背和臀部一起收紧,把四肢/腿抬离地面,不是用腰猛甩。",
@@ -446,7 +495,7 @@
           "mode": "自重",
           "name": "徒手提踵",
           "gif": "assets/exercises/calf-raise.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "15-20",
           "muscle": "腓肠肌 + 比目鱼肌",
           "cue": "小腿后侧收缩,把脚跟尽可能抬高。",
@@ -459,7 +508,7 @@
           "mode": "哑铃",
           "name": "哑铃提踵",
           "gif": "assets/exercises/db-calf-raise.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "15-20",
           "muscle": "腓肠肌 + 比目鱼肌",
           "cue": "同徒手,负重后小腿后侧更酸。",
@@ -539,6 +588,19 @@
           "key": "肩胛下沉启动、核心收紧、不要摆腿借力。",
           "mistake": "只用手臂、半程、耸肩。",
           "when": "你的龙门架有引体杆"
+        },
+        {
+          "id": "back-db-row-both",
+          "mode": "哑铃",
+          "name": "双臂俯身哑铃划船",
+          "gif": "assets/exercises/db-row-both.gif",
+          "sets": "3",
+          "reps": "10-12",
+          "muscle": "背阔肌 + 中背",
+          "cue": "俯身 45 度定住,用背把哑铃拉向髋部,顶点停 1 秒。",
+          "key": "全程不耸肩;想『肘往后袋』不是『手拉铃』。",
+          "mistake": "起身借力、用二头拉、耸肩。",
+          "when": "单臂划船力竭后的补充/交替"
         }
       ]
     },
@@ -553,7 +615,7 @@
           "mode": "哑铃",
           "name": "哑铃俯身反向飞鸟",
           "gif": "assets/exercises/db-reverse-fly.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "12-15",
           "muscle": "三角肌后束 + 斜方肌",
           "cue": "肩胛后缩,后束把手臂向两侧抬起。",
@@ -566,13 +628,26 @@
           "mode": "龙门架",
           "name": "高位绳索反向飞鸟/面拉",
           "gif": "assets/exercises/cable-reverse-fly.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "12-15",
           "muscle": "三角肌后束 + 肩袖",
           "cue": "绳索向脸侧拉开,后束+上背收缩,前臂外旋。",
           "key": "肘高于手腕、拉到耳朵两侧;不耸肩。",
           "mistake": "重量过大、身体后仰。",
           "when": "你的龙门架「高位飞鸟」"
+        },
+        {
+          "id": "rear-cable-facepull",
+          "mode": "龙门架",
+          "name": "绳索面拉",
+          "gif": "assets/exercises/cable-face-pull.gif",
+          "sets": "3",
+          "reps": "12-15",
+          "muscle": "三角肌后束 + 上背",
+          "cue": "绳索调到脸高,肘抬高往脸拉,末端拳头往后旋。",
+          "key": "沉肩;终点在脸前方收住,不必拉到脖子两侧。",
+          "mistake": "重量过大变成划船、身体后仰。",
+          "when": "后束感比反向飞鸟明确,二选一或都做"
         }
       ]
     },
@@ -621,7 +696,7 @@
           "mode": "自重",
           "name": "徒手/毛巾弯举",
           "gif": "assets/exercises/bodyweight-curl.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "10-15",
           "muscle": "肱二头肌",
           "cue": "前臂向上弯时二头收缩,下放时拉伸。",
@@ -634,7 +709,7 @@
           "mode": "哑铃",
           "name": "哑铃弯举",
           "gif": "assets/exercises/db-curl.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "10-12",
           "muscle": "肱二头肌",
           "cue": "弯举时二头鼓起,顶端轻旋前臂。",
@@ -647,7 +722,7 @@
           "mode": "龙门架",
           "name": "绳索弯举",
           "gif": "assets/exercises/cable-curl.gif",
-          "sets": "2",
+          "sets": "3",
           "reps": "12-15",
           "muscle": "肱二头肌",
           "cue": "持续张力下二头收缩,顶峰更明显。",
